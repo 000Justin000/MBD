@@ -1,20 +1,21 @@
 PROGRAM MBD_rsSCS
+!-------------------------------------------------------------------------
     USE UTILS
     IMPLICIT NONE
     !---------------------------------------------------------------------
     ! --- local variables ---
     !---------------------------------------------------------------------
-    CHARACTER*200        :: geometry_file
-    CHARACTER*200        :: settings_file
-    CHARACTER*200        :: string
-    CHARACTER*200        :: dster
-    CHARACTER*200        :: temp
-    INTEGER              :: io_file
-    INTEGER              :: io_line
-    INTEGER              :: i_index
-    INTEGER              :: j_index
-    REAL*8               :: ene_mbd_rsSCS
-    INTEGER              :: input_settings(5)
+    CHARACTER*200                ::   geometry_file
+    CHARACTER*200                ::   settings_file
+    CHARACTER*200                ::   string
+    CHARACTER*200                ::   dster
+    CHARACTER*200                ::   temp
+    INTEGER                      ::   io_file
+    INTEGER                      ::   io_line
+    INTEGER                      ::   i_index
+    INTEGER                      ::   j_index
+    REAL*8                       ::   ene_mbd_rsSCS
+    INTEGER, DIMENSION(5)        ::   input_settings
     !---------------------------------------------------------------------
 
     !---------------------------------------------------------------------
@@ -195,9 +196,9 @@ PROGRAM MBD_rsSCS
     CALL allocate_task()
     CALL MBD_at_rsSCS(ene_mbd_rsSCS)
     !---------------------------------------------------------------------
-       
 
     !---------------------------------------------------------------------
+    ! clean up
     !---------------------------------------------------------------------
     IF(ALLOCATED(coords))             DEALLOCATE(coords)
     IF(ALLOCATED(atom_name))          DEALLOCATE(atom_name)
@@ -207,4 +208,5 @@ PROGRAM MBD_rsSCS
     STOP
     !---------------------------------------------------------------------
 100 IF (io_file .NE. 0) WRITE(*,*) "Error in reading input file"
+!-------------------------------------------------------------------------
 END PROGRAM MBD_rsSCS

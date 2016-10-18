@@ -1,218 +1,255 @@
-module  UTILS
-      implicit none
-      include 'mpif.h'
-      character*400 :: info_str  
-      real*8,dimension(:,:),allocatable:: coupled_atom_pol
-      real*8,dimension(:,:),allocatable:: relay_matrix
-      real*8,dimension(:,:),allocatable:: relay_matrix_periodic
-      real*8,dimension(:),allocatable:: alpha_omega
-      real*8,dimension(:),allocatable:: R_p
-      real*8,dimension(:),allocatable:: Rvdw_iso
-      real*8,dimension(:),allocatable:: alpha_eff
-      real*8,dimension(:),allocatable:: C6_eff
-      integer,dimension(:),allocatable:: task_list
-      real*8,dimension(3,3):: mol_pol_tensor
-      real*8 :: casimir_omega(0:20)
-      real*8 :: casimir_omega_weight(0:20)
+MODULE  UTILS
+!------------------------------------------------------------------------------------------------------------------------------------------
+    USE MPI
+    IMPLICIT NONE
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    CHARACTER*500                               ::   info_str  
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    ! constant
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    REAL*8                                      ::   bohr
+    REAL*8                                      ::   pi
+    REAL*8                                      ::   three_by_pi 
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    ! input setting
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    INTEGER                                     ::   flag_xc
+    INTEGER                                     ::   n_periodic
+    REAL*8                                      ::   mbd_cfdm_dip_cutoff 
+    REAL*8                                      ::   mbd_supercell_cutoff  
+    REAL*8                                      ::   mbd_scs_dip_cutoff
+    LOGICAL,                  DIMENSION(3)      ::   mbd_scs_vacuum_axis
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    ! geometry input
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    CHARACTER*2, ALLOCATABLE, DIMENSION(:)      ::   atom_name
+    REAL*8,      ALLOCATABLE, DIMENSION(:)      ::   hirshfeld_volume             ! hirshfeld_volume from hirshfeld partioning
+    REAL*8,      ALLOCATABLE, DIMENSION(:,:)    ::   coords
+    REAL*8,                   DIMENSION(3,3)    ::   lattice_vector
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    INTEGER,     ALLOCATABLE, DIMENSION(:)      ::   task_list
+    REAL*8,      ALLOCATABLE, DIMENSION(:,:)    ::   coupled_atom_pol
+    REAL*8,      ALLOCATABLE, DIMENSION(:,:)    ::   relay_matrix                 ! 3N x 3N (imaginary) frequency dependent matrix
+    REAL*8,      ALLOCATABLE, DIMENSION(:,:)    ::   relay_matrix_periodic
+    REAL*8,      ALLOCATABLE, DIMENSION(:)      ::   alpha_omega
+    REAL*8,      ALLOCATABLE, DIMENSION(:)      ::   R_p                          ! effective dipole spread of QHO, [PRB,75,045407(2007)]
+    REAL*8,      ALLOCATABLE, DIMENSION(:)      ::   Rvdw_iso                             
+    REAL*8,      ALLOCATABLE, DIMENSION(:)      ::   alpha_eff
+    REAL*8,      ALLOCATABLE, DIMENSION(:)      ::   C6_eff
+    REAL*8,                   DIMENSION(3,3)    ::   mol_pol_tensor
+    REAL*8,                   DIMENSION(0:20)   ::   casimir_omega
+    REAL*8,                   DIMENSION(0:20)   ::   casimir_omega_weight
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    ! mpi
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    INTEGER                                     ::   myid     
+    INTEGER                                     ::   mpiierror                    ! mpi_error_handler 
+    INTEGER                                     ::   n_tasks                      ! number of theads    
+    INTEGER                                     ::   n_atoms                      ! number of atoms
+    !--------------------------------------------------------------------------------------------------------------------------------------
 
-      ! constant
-      real*8 :: bohr, pi,three_by_pi 
-      !input setting
-      integer :: flag_xc
-      integer :: n_periodic
-      real*8 :: mbd_cfdm_dip_cutoff 
-      real*8 :: mbd_supercell_cutoff  
-      real*8 :: mbd_scs_dip_cutoff
-      logical,dimension(3) ::mbd_scs_vacuum_axis
-      
-      character*2,allocatable,dimension(:) ::  atom_name
-      real*8,allocatable,dimension(:) :: hirshfeld_volume 
-      real*8,allocatable,dimension(:,:) ::coords
-      real*8,dimension(3,3) :: lattice_vector 
-      !MPI
-      integer :: myid     
-      integer :: mpiierror ! mpi_error_handler 
-      integer :: n_tasks   ! number of theads    
-      integer :: n_atoms   ! number of atoms
-         
-      contains
+CONTAINS
 
-subroutine init_constants()
-       flag_xc                = 1      !XC= PBE
-       mbd_cfdm_dip_cutoff    = 100.d0 ! Angstrom
-       mbd_supercell_cutoff   = 25.d0  ! Angstrom
-       mbd_scs_dip_cutoff     = 120.0  ! Angstrom
-       n_periodic             = 0  
-       bohr                   = 0.52917721d0
-       pi                     = 3.14159265358979323846d0
-       three_by_pi            = 0.954929658551372d0
-       mbd_scs_vacuum_axis(1) = .false. 
-       mbd_scs_vacuum_axis(2) = .false. 
-       mbd_scs_vacuum_axis(3) = .false. 
-endsubroutine init_constants
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    SUBROUTINE init_constants()
+        !----------------------------------------------------------------------------------------------------------------------------------
+        flag_xc                = 1                                                ! XC= PBE
+        mbd_cfdm_dip_cutoff    = 100.d0                                           ! Angstrom
+        mbd_supercell_cutoff   = 25.d0                                            ! Angstrom
+        mbd_scs_dip_cutoff     = 120.0                                            ! Angstrom
+        n_periodic             = 0  
+        bohr                   = 0.52917721d0
+        pi                     = 3.14159265358979323846d0
+        three_by_pi            = 0.954929658551372d0
+        mbd_scs_vacuum_axis(1) = .false. 
+        mbd_scs_vacuum_axis(2) = .false. 
+        mbd_scs_vacuum_axis(3) = .false. 
+        !----------------------------------------------------------------------------------------------------------------------------------
+    END SUBROUTINE init_constants
+    !--------------------------------------------------------------------------------------------------------------------------------------
 
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    SUBROUTINE start_mpi()
+        !----------------------------------------------------------------------------------------------------------------------------------
+        CALL MPI_INIT (mpiierror)
+        CALL MPI_COMM_RANK (MPI_COMM_WORLD, myid,    mpiierror)
+        CALL MPI_COMM_SIZE (MPI_COMM_WORLD, n_tasks, mpiierror)
+        !----------------------------------------------------------------------------------------------------------------------------------
+    END SUBROUTINE
+    !--------------------------------------------------------------------------------------------------------------------------------------
 
-!MPI stuff
-subroutine start_mpi()
-       call MPI_INIT (mpiierror)
-       call MPI_COMM_RANK (MPI_COMM_WORLD, myid,   mpiierror)
-       call MPI_COMM_SIZE (MPI_COMM_WORLD, n_tasks,mpiierror)
-endsubroutine
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    SUBROUTINE stop_mpi()
+        !----------------------------------------------------------------------------------------------------------------------------------
+        CALL MPI_FINALIZE(mpiierror)
+        IF(mpiierror.ne.0) WRITE(*,*) "ERROR in terminating MPI"
+        IF(mpiierror.ne.0) WRITE(*,*) "Normal Termination"
+        STOP
+        !----------------------------------------------------------------------------------------------------------------------------------
+    END SUBROUTINE
+    !--------------------------------------------------------------------------------------------------------------------------------------
 
-subroutine stop_mpi()
-call MPI_FINALIZE(mpiierror)
-if(mpiierror.ne.0) write(*,*)"ERROR in terminating MPI"
-if(mpiierror.ne.0) write(*,*) "Normal Termination"
-stop
-endsubroutine
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    SUBROUTINE allocate_task()
+        !----------------------------------------------------------------------------------------------------------------------------------
+        INTEGER :: i_row
+        !----------------------------------------------------------------------------------------------------------------------------------
+        IF(.NOT. ALLOCATED(task_list)) ALLOCATE(task_list(n_atoms))
+        DO i_row=1,n_atoms
+            task_list(i_row) = MOD(i_row,n_tasks)
+        END DO
+        !----------------------------------------------------------------------------------------------------------------------------------
+    END SUBROUTINE allocate_task
+    !--------------------------------------------------------------------------------------------------------------------------------------
 
-subroutine allocate_task()
-    integer :: i_row
-    if(.NOT.allocated(task_list))allocate(task_list(n_atoms))
-    do i_row=1,n_atoms
-    task_list(i_row) = MOD(i_row,n_tasks)
-    enddo
-endsubroutine allocate_task
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    SUBROUTINE sync_tensors(temp_matrix,num_element)
+        !----------------------------------------------------------------------------------------------------------------------------------
+        INTEGER                                      :: num_element
+        REAL*8, DIMENSION(num_element,num_element)   :: temp_matrix
+        REAL*8, DIMENSION(num_element,num_element)   :: temp_matrix_mpi
+        !----------------------------------------------------------------------------------------------------------------------------------
+        call MPI_ALLREDUCE(temp_matrix, temp_matrix_mpi, num_element*num_element, MPI_DOUBLE_PRECISION, MPI_SUM,MPI_COMM_WORLD, mpiierror)
+        temp_matrix = temp_matrix_mpi
+        !----------------------------------------------------------------------------------------------------------------------------------
+    END SUBROUTINE
+    !--------------------------------------------------------------------------------------------------------------------------------------
 
-
-subroutine sync_tensors(temp_matrix,num_element)
-!      use dimensions
-      implicit none
-      integer :: num_element
-      real*8,dimension(num_element,num_element):: temp_matrix ,temp_matrix_mpi
-      integer :: mpierr
-      call MPI_ALLREDUCE(temp_matrix,temp_matrix_mpi,&
-      num_element*num_element,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,mpierr)
-      temp_matrix = temp_matrix_mpi
-endsubroutine
-
-
-
-
-
-subroutine MBD_at_rsSCS(ene_mbd_rsSCS)
-      ! local variable 
-      real*8 :: C6_free
-      real*8 :: alpha_free
-      real*8 :: R_free
-      real*8 :: mol_c6_coeff
-      real*8 :: C6_atom
-      real*8 :: R_vdw_free
-      integer :: i_freq
-      integer :: i_myatom
-      real*8 :: mol_pol_eigen(3)
-      real*8 :: WORK(9)
-      integer::errorflag,LWORK
-      real*8 :: ene_mbd_rsSCS
-      ! o INPUT
-      ! o hirshfeld_volume from hirshfeld partioning 
-      ! o relay_matrix is 3N x 3N (imaginary) frequency dependent matrix
-      ! o R_p is effective dipole spread of quantum harmonic oscilator defined
-      !   with respect to Mayer representation A. Mayer, Phys. Rev. B, 75,045407(2007)
-      ! o alpha_omega is single pole polarizability of atom in molecule
-      ! o coupled_atom_pol contains atom resolved screened polarizabilities at every
-      !   imaginary frequency 
-      ! o alpha_eff is atom resolved screened polarizabilty at ZERO frequency 
-      ! o C6_eff is atom resolved screened C6 coefficients calculated by
-      !   integrating coupled_atom_pol over entire frequency range 
-
-
-
-      if(.not.allocated(relay_matrix))     allocate(relay_matrix(3*n_atoms,3*n_atoms))
-
-      if(n_periodic .gt. 0) then
-      if(.not.allocated(relay_matrix_periodic)) allocate(relay_matrix_periodic(3*n_atoms,3*n_atoms))
-      endif
-
-      if(.not.allocated(R_p))              allocate(R_p(n_atoms))
-      if(.not.allocated(Rvdw_iso))         allocate(Rvdw_iso(n_atoms))
-      if(.not.allocated(alpha_omega))      allocate(alpha_omega(n_atoms))
-      if(.not.allocated(coupled_atom_pol)) allocate(coupled_atom_pol(20,n_atoms))
-      if(.not.allocated(alpha_eff))        allocate(alpha_eff(n_atoms))
-      if(.not.allocated(C6_eff))           allocate(C6_eff(n_atoms))
-
-
-      casimir_omega        = 0.d0
-      casimir_omega_weight = 0.d0 
-!     call gauleg(0.d0,30.d0,casimir_omega(1:20),casimir_omega_weight(1:20),20)
-      ! currently I am using   
-      call gauss_legendre_grid()
-
-      coupled_atom_pol = 0.d0
-          mol_c6_coeff = 0.d0
-             alpha_eff = 0.d0
-                C6_eff = 0.d0 
- 
-
-     write(info_str,'(2x,A)')"| Many-Body Dispersion (MBD@rsSCS) energy "
-     call output_string(info_str)
-      if(n_periodic .eq. 0) then
-        write(info_str,'(2x,A)')"| Dynamic molecular polarizability alpha(iw) (bohr^3)"
-        call output_string(info_str)
-      else
-        write(info_str,'(2x,A)')"| Dynamic polarizability of unit cell alpha(iw) (bohr^3)"
-        call output_string(info_str)
-      endif
-      write(info_str,'(2x,A)')"| ---------------------------------------------------------------------------"
-      call output_string(info_str)
-      write(info_str,'(2x,A)')"|  omega(Ha)   alpha_iso      alpha_xx       alpha_yy       alpha_zz"
-      call output_string(info_str)
-
-
-    ! Loop over Casimir-Polder frequencies
-      do i_freq=0,20,1
-              !! zeroout array before getting actual frequency dependent parameters
-              R_p = 0.0d0
-              alpha_omega = 0.0d0
-              relay_matrix= 0.0d0
-             mol_pol_tensor= 0.0d0
-             Rvdw_iso=0.d0 
-              ! loop over atoms
-              do i_myatom=1,n_atoms,1
-                   call get_vdw_param(atom_name(i_myatom),C6_free,alpha_free,R_vdw_free)
-                   call get_alpha_omega_and_Rp(hirshfeld_volume(i_myatom),C6_free,&
-                              alpha_free,casimir_omega(i_freq),alpha_omega(i_myatom),R_p(i_myatom))
-                   Rvdw_iso(i_myatom)= (hirshfeld_volume(i_myatom)**0.333333333333333333333333333d0)*R_vdw_free
-!             if(i_freq.eq.0) then 
-!             write(info_str,*)atom_name(i_myatom),hirshfeld_volume(i_myatom),alpha_omega(i_myatom),R_p(i_myatom) 
-!             call output_string(info_str)
-!             endif
-
-              enddo ! end loop over atoms
-
-
-              ! compute screened polarizability using isotropically damped
-              ! tensor Ambrosetti et al
-              ! matrix(INPUT:-alpha_omega,R_p,Rvdw_iso) 
-             call calculate_scs_matrix() 
-
-              ! Contract relay_matrix^-1 for polarizability
-             call contract_matrix(mol_pol_tensor)  
-
-              ! get coupled atomic "local" polarizability by summing over row or columns of
-              ! relay tensor
-              if (i_freq.eq.0) then
-                 ! Store static polarizability for post SCS routines  
-                 call calculate_screened_polarizability(alpha_eff)
-              endif
-
-              if (i_freq.ge.1) then
-                 call calculate_screened_polarizability(coupled_atom_pol(i_freq,:))
-              endif 
-
-              ! Casimir-Polder integral for molecular C6-coefficent 
-              LWORK=9 
-              call DSYEV('V','U',3,mol_pol_tensor,3,mol_pol_eigen,WORK,LWORK,errorflag) 
-              if(i_freq.ge.1)  then
-                  mol_c6_coeff = mol_c6_coeff + (casimir_omega_weight(i_freq)* (sum(mol_pol_eigen)/3.0)**2)
-              endif
-
-              write(info_str,'(2x,"| ",F10.6,4(e15.6))')casimir_omega(i_freq),&
-                     sum(mol_pol_eigen)/3.0,mol_pol_eigen(1),mol_pol_eigen(2),mol_pol_eigen(3)
-              call output_string(info_str)  
-      enddo ! end   over freq
-
-
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    SUBROUTINE MBD_at_rsSCS(ene_mbd_rsSCS)
+        !----------------------------------------------------------------------------------------------------------------------------------
+        ! local variable 
+        !----------------------------------------------------------------------------------------------------------------------------------
+        INTEGER                :: i_freq
+        INTEGER                :: i_myatom
+        INTEGER                :: errorflag
+        INTEGER                :: LWORK
+        REAL*8                 :: C6_free
+        REAL*8                 :: alpha_free
+        REAL*8                 :: R_free
+        REAL*8                 :: mol_c6_coeff
+        REAL*8                 :: C6_atom
+        REAL*8                 :: R_vdw_free
+        REAL*8                 :: ene_mbd_rsSCS
+        REAL*8, DIMENSION(9)   :: WORK(9)
+        REAL*8, DIMENSION(3)   :: mol_pol_eigen(3)
+        !----------------------------------------------------------------------------------------------------------------------------------
+        ! Input
+        !----------------------------------------------------------------------------------------------------------------------------------
+        ! o hirshfeld_volume from hirshfeld partioning 
+        ! o relay_matrix is 3N x 3N (imaginary) frequency dependent matrix
+        ! o R_p is effective dipole spread of quantum harmonic oscilator
+        ! o alpha_omega is single pole polarizability of atom in molecule
+        ! o coupled_atom_pol contains atom resolved screened polarizabilities at every imaginary frequency 
+        ! o alpha_eff is atom resolved screened polarizabilty at ZERO frequency 
+        ! o C6_eff is atom resolved screened C6 coefficients calculated by integrating coupled_atom_pol over entire frequency range 
+        !----------------------------------------------------------------------------------------------------------------------------------
+        
+        !----------------------------------------------------------------------------------------------------------------------------------
+        ! Allocation
+        !----------------------------------------------------------------------------------------------------------------------------------
+        ! JJ: as distributed computing, you can not allocate the same matrix everywhere 3N*3N
+        !----------------------------------------------------------------------------------------------------------------------------------
+        IF(.NOT. ALLOCATED(relay_matrix))              ALLOCATE(relay_matrix(3*n_atoms,3*n_atoms))
+        IF(.NOT. ALLOCATED(R_p))                       ALLOCATE(R_p(n_atoms))
+        IF(.NOT. ALLOCATED(Rvdw_iso))                  ALLOCATE(Rvdw_iso(n_atoms))
+        IF(.NOT. ALLOCATED(alpha_omega))               ALLOCATE(alpha_omega(n_atoms))
+        IF(.NOT. ALLOCATED(coupled_atom_pol))          ALLOCATE(coupled_atom_pol(20,n_atoms))
+        IF(.NOT. ALLOCATED(alpha_eff))                 ALLOCATE(alpha_eff(n_atoms))
+        IF(.NOT. ALLOCATED(C6_eff))                    ALLOCATE(C6_eff(n_atoms))
+        IF(n_periodic .GT. 0) THEN
+            IF(.NOT. ALLOCATED(relay_matrix_periodic)) ALLOCATE(relay_matrix_periodic(3*n_atoms,3*n_atoms))
+        END IF
+        !----------------------------------------------------------------------------------------------------------------------------------
+        
+        !----------------------------------------------------------------------------------------------------------------------------------
+        ! Initialization
+        !----------------------------------------------------------------------------------------------------------------------------------
+        C6_eff               = 0.0d0 
+        alpha_eff            = 0.0d0
+        mol_c6_coeff         = 0.0d0
+        coupled_atom_pol     = 0.0d0
+        casimir_omega        = 0.0d0
+        casimir_omega_weight = 0.0d0 
+        CALL gauss_legendre_grid()
+        !----------------------------------------------------------------------------------------------------------------------------------
+        
+        !----------------------------------------------------------------------------------------------------------------------------------
+        ! Write Title
+        !----------------------------------------------------------------------------------------------------------------------------------
+        WRITE(info_str,'(2x,A)')"| Many-Body Dispersion (MBD@rsSCS) energy "
+        CALL output_string(info_str)
+        IF(n_periodic .eq. 0) THEN
+            WRITE(info_str,'(2x,A)')"| Dynamic molecular polarizability alpha(iw) (bohr^3)"
+            CALL output_string(info_str)
+        ELSE
+            WRITE(info_str,'(2x,A)')"| Dynamic polarizability of unit cell alpha(iw) (bohr^3)"
+            CALL output_string(info_str)
+        END IF
+        WRITE(info_str,'(2x,A)')"| ---------------------------------------------------------------------------"
+        CALL output_string(info_str)
+        WRITE(info_str,'(2x,A)')"|  omega(Ha)   alpha_iso      alpha_xx       alpha_yy       alpha_zz"
+        CALL output_string(info_str)
+        !----------------------------------------------------------------------------------------------------------------------------------
+        
+        !----------------------------------------------------------------------------------------------------------------------------------
+        ! Loop over Casimir-Polder frequencies
+        !----------------------------------------------------------------------------------------------------------------------------------
+        DO i_freq=0,20
+            !------------------------------------------------------------------------------------------------------------------------------
+            ! zeroout array before getting actual frequency dependent parameters
+            !------------------------------------------------------------------------------------------------------------------------------
+            R_p            = 0.0d0
+            Rvdw_iso       = 0.0d0 
+            alpha_omega    = 0.0d0
+            relay_matrix   = 0.0d0
+            mol_pol_tensor = 0.0d0
+            !------------------------------------------------------------------------------------------------------------------------------
+            
+            !------------------------------------------------------------------------------------------------------------------------------
+            ! 
+            !------------------------------------------------------------------------------------------------------------------------------
+            DO i_myatom=1,n_atoms
+                CALL get_vdw_param(atom_name(i_myatom),C6_free,alpha_free,R_vdw_free)
+                CALL get_alpha_omega_and_Rp(hirshfeld_volume(i_myatom),C6_free,alpha_free,casimir_omega(i_freq),alpha_omega(i_myatom),R_p(i_myatom))
+                Rvdw_iso(i_myatom)= (hirshfeld_volume(i_myatom)**0.333333333333333333333333333d0)*R_vdw_free
+            END DO
+            !------------------------------------------------------------------------------------------------------------------------------
+            
+            !------------------------------------------------------------------------------------------------------------------------------
+            ! compute screened polarizability using isotropically damped tensor matrix(INPUT:-alpha_omega,R_p,Rvdw_iso), Ambrosetti et al 
+            !------------------------------------------------------------------------------------------------------------------------------
+            CALL calculate_scs_matrix() 
+            
+            ! Contract relay_matrix^-1 for polarizability
+            call contract_matrix(mol_pol_tensor)  
+            
+            ! get coupled atomic "local" polarizability by summing over row or columns of
+            ! relay tensor
+            if (i_freq.eq.0) then
+               ! Store static polarizability for post SCS routines  
+               call calculate_screened_polarizability(alpha_eff)
+            endif
+            
+            if (i_freq.ge.1) then
+               call calculate_screened_polarizability(coupled_atom_pol(i_freq,:))
+            endif 
+            
+            ! Casimir-Polder integral for molecular C6-coefficent 
+            LWORK=9 
+            call DSYEV('V','U',3,mol_pol_tensor,3,mol_pol_eigen,WORK,LWORK,errorflag) 
+            if(i_freq.ge.1)  then
+                mol_c6_coeff = mol_c6_coeff + (casimir_omega_weight(i_freq)* (sum(mol_pol_eigen)/3.0)**2)
+            endif
+            
+            write(info_str,'(2x,"| ",F10.6,4(e15.6))')casimir_omega(i_freq),&
+                   sum(mol_pol_eigen)/3.0,mol_pol_eigen(1),mol_pol_eigen(2),mol_pol_eigen(3)
+            call output_string(info_str)  
+        !----------------------------------------------------------------------------------------------------------------------------------
+        END DO
+        !----------------------------------------------------------------------------------------------------------------------------------
+        
+        
               write(info_str,'(2x,A)')&
               "| ---------------------------------------------------------------------------"
               call output_string(info_str)  
@@ -282,21 +319,22 @@ subroutine MBD_at_rsSCS(ene_mbd_rsSCS)
 
 
       return
- endsubroutine MBD_at_rsSCS
+    END SUBROUTINE MBD_at_rsSCS
 
-  subroutine calculate_scs_matrix()
-
-    integer ::i_index,j_index
-    real*8,dimension(3,3)::TPP
-    real*8,dimension(3) :: dxyz
-    real*8,dimension(3) :: coord_curr
-    real*8 :: r_ij
-    real*8 :: r_pp
-    real*8 :: Rvdw12
-    real*8 :: beta
-    integer :: i_row, i_col
-    integer :: i_lattice, j_lattice, k_lattice
-    integer :: errorflag,periodic_cell_i,periodic_cell_j,periodic_cell_k
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    SUBROUTINE calculate_scs_matrix()
+    !--------------------------------------------------------------------------------------------------------------------------------------
+        integer ::i_index,j_index
+        real*8,dimension(3,3)::TPP
+        real*8,dimension(3) :: dxyz
+        real*8,dimension(3) :: coord_curr
+        real*8 :: r_ij
+        real*8 :: r_pp
+        real*8 :: Rvdw12
+        real*8 :: beta
+        integer :: i_row, i_col
+        integer :: i_lattice, j_lattice, k_lattice
+        integer :: errorflag,periodic_cell_i,periodic_cell_j,periodic_cell_k
 
     !For LAPACK
     integer,dimension(3*n_atoms):: IPIV
@@ -1342,5 +1380,6 @@ if(myid.eq.0) write(*,*)trim(info_str)
 endsubroutine output_string
 
 
-endmodule UTILS
+!-------------------------------------------------------------------------
+END MODULE UTILS
 
