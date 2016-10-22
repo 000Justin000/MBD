@@ -179,15 +179,13 @@ CONTAINS
         !----------------------------------------------------------------------------------------------------------------------------------
         WRITE(info_str,'(2x,A)')"| Many-Body Dispersion (MBD@rsSCS) energy "
         CALL output_string(info_str)
-        IF(n_periodic .eq. 0) THEN
-            WRITE(info_str,'(2x,A)')"| Dynamic molecular polarizability alpha(iw) (bohr^3)"
-            CALL output_string(info_str)
-        ELSE
-            WRITE(info_str,'(2x,A)')"| Dynamic polarizability of unit cell alpha(iw) (bohr^3)"
-            CALL output_string(info_str)
-        END IF
+        !----------------------------------------------------------------------------------------------------------------------------------
+        WRITE(info_str,'(2x,A)')"| System dynamic molecular polarizability alpha(iw) (bohr^3)"
+        CALL output_string(info_str)
+        !----------------------------------------------------------------------------------------------------------------------------------
         WRITE(info_str,'(2x,A)')"| ---------------------------------------------------------------------------"
         CALL output_string(info_str)
+        !----------------------------------------------------------------------------------------------------------------------------------
         WRITE(info_str,'(2x,A)')"|  omega(Ha)   alpha_iso      alpha_xx       alpha_yy       alpha_zz"
         CALL output_string(info_str)
         !----------------------------------------------------------------------------------------------------------------------------------
@@ -207,7 +205,7 @@ CONTAINS
             !------------------------------------------------------------------------------------------------------------------------------
             
             !------------------------------------------------------------------------------------------------------------------------------
-            ! 
+            ! compute frequency dependent proprieties (R_p)
             !------------------------------------------------------------------------------------------------------------------------------
             DO i_myatom=1,n_atoms
                 CALL get_vdw_param(atom_name(i_myatom),C6_free,alpha_free,R_vdw_free)
@@ -232,15 +230,17 @@ CONTAINS
             ! get coupled atomic "local" polarizability by summing over row or columns of relay tensor
             !------------------------------------------------------------------------------------------------------------------------------
             IF(i_freq .EQ. 0) THEN
-               CALL calculate_screened_polarizability(alpha_eff)                        ! static polarizability
+               CALL calculate_screened_polarizability(alpha_eff)                                                    ! static polarizability
             ELSE
-               CALL calculate_screened_polarizability(coupled_atom_pol(i_freq,:))       ! frequency dependent polarizability
+               CALL calculate_screened_polarizability(coupled_atom_pol(i_freq,:))                      ! frequency dependent polarizability
             END IF 
             !------------------------------------------------------------------------------------------------------------------------------
             
+            !------------------------------------------------------------------------------------------------------------------------------
             ! Casimir-Polder integral for molecular C6-coefficent 
+            !------------------------------------------------------------------------------------------------------------------------------
             LWORK=9 
-            CALL DSYEV('V','U',3,mol_pol_tensor,3,mol_pol_eigen,WORK,LWORK,errorflag)   ! JJ: this one is not symmetric either
+            CALL DSYEV('V','U',3,mol_pol_tensor,3,mol_pol_eigen,WORK,LWORK,errorflag)                ! JJ: this one is not symmetric either
             IF(i_freq .GE. 1) THEN
                 mol_c6_coeff = mol_c6_coeff + (casimir_omega_weight(i_freq)* (sum(mol_pol_eigen)/3.0)**2)
             END IF
@@ -251,64 +251,60 @@ CONTAINS
         END DO
         !----------------------------------------------------------------------------------------------------------------------------------
         
+        !----------------------------------------------------------------------------------------------------------------------------------
+        WRITE(info_str,'(2x,A)') "| ---------------------------------------------------------------------------"
+        CALL output_string(info_str)  
+        !----------------------------------------------------------------------------------------------------------------------------------
+        WRITE(info_str,'(2x,A,f20.8,2x,A)') "| System C6 coefficient    :  ",0.954929658551372d0*mol_c6_coeff,"  hartree bohr^6"
+        CALL output_string(info_str)  
+        !----------------------------------------------------------------------------------------------------------------------------------
+        WRITE(info_str,'(2x,A)') "| ---------------------------------------------------------------------------"
+        CALL output_string(info_str)  
+        !----------------------------------------------------------------------------------------------------------------------------------
+        WRITE(info_str,'(2x,A)') "| Partitioned C6 (hartree bohr^6) | alpha (bohr^3)  of atom in system"
+        CALL output_string(info_str)  
+        !----------------------------------------------------------------------------------------------------------------------------------
+        WRITE(info_str,'(2x,A)') "| ---------------------------------------------------------------------------"
+        CALL output_string(info_str)  
+        !----------------------------------------------------------------------------------------------------------------------------------
         
-              write(info_str,'(2x,A)')&
-              "| ---------------------------------------------------------------------------"
-              call output_string(info_str)  
+        !----------------------------------------------------------------------------------------------------------------------------------
+        DO i_myatom=1,n_atoms,1
+            !------------------------------------------------------------------------------------------------------------------------------
+            C6_atom = 0.0d0 
+            !------------------------------------------------------------------------------------------------------------------------------
+            DO i_freq=1,20,1
+                C6_atom = C6_atom + (casimir_omega_weight(i_freq)*coupled_atom_pol(i_freq,i_myatom)**2)
+            END DO
+            !------------------------------------------------------------------------------------------------------------------------------
+            WRITE(info_str,'(2x,A,I4,2x,A,f12.6,6x,f12.6)') "| ATOM ",i_myatom,atom_name(i_myatom), C6_atom*0.954929658551372d0,alpha_eff(i_myatom)
+            CALL output_string(info_str)  
+            !------------------------------------------------------------------------------------------------------------------------------
+            C6_eff(i_myatom)=C6_atom*0.954929658551372d0                                                        ! effctive C6 for each atom
+            !------------------------------------------------------------------------------------------------------------------------------
+        END DO 
+        !----------------------------------------------------------------------------------------------------------------------------------
+        
+        !----------------------------------------------------------------------------------------------------------------------------------
+        WRITE(info_str,'(2x,A)') "| ---------------------------------------------------------------------------"
+        CALL output_string(info_str)
+        !----------------------------------------------------------------------------------------------------------------------------------
+        
+        !----------------------------------------------------------------------------------------------------------------------------------
+        ! Compute many-body-dispersion energy new alpha_eff and C6_eff
+        !----------------------------------------------------------------------------------------------------------------------------------
+        call get_mbd_rSCS(ene_mbd_rsSCS)
+        !----------------------------------------------------------------------------------------------------------------------------------
 
-              if(n_periodic .eq. 0) then   
-              Write(info_str,'(2x,A,f20.8,2x,A)')&
-              "| Molecular C6 coefficient    :  ",0.954929658551372d0*mol_c6_coeff,"  hartree bohr^6"
-              call output_string(info_str)  
-              else
-              Write(info_str,'(2x,A,f20.8,2x,A)')&
-              "| Unit cell C6 coefficient    :  ",0.954929658551372d0*mol_c6_coeff,"  hartree bohr^6"
-              call output_string(info_str)  
-              endif
-
-              write(info_str,'(2x,A)')&
-              "| ---------------------------------------------------------------------------"
-              call output_string(info_str)  
-              if(n_periodic .eq. 0) then
-              write(info_str,'(2x,A)')"| Partitioned C6 (hartree bohr^6) | alpha (bohr^3)  of atom in molecule"
-              call output_string(info_str)  
-              else
-              write(info_str,'(2x,A)')"| Partitioned C6 (hartree bohr^6) | alpha (bohr^3)  of atom in unit cell"
-              call output_string(info_str)  
-           
-              endif  
-              write(info_str,'(2x,A)')&
-              "| ---------------------------------------------------------------------------"
-              call output_string(info_str)  
-
-              do i_myatom=1,n_atoms,1
-                 C6_atom = 0.0d0 
-                 do i_freq=1,20,1
-                 C6_atom = C6_atom + (casimir_omega_weight(i_freq)*coupled_atom_pol(i_freq,i_myatom)**2)
-                 enddo
-                 write(info_str,'(2x,A,I4,2x,A,f12.6,6x,f12.6)')"| ATOM ",i_myatom,&
-                             atom_name(i_myatom), C6_atom*0.954929658551372d0,alpha_eff(i_myatom)
-                 call output_string(info_str)  
-
-                 !store effctive C6 for post SCS routines 
-                  C6_eff(i_myatom)=C6_atom*0.954929658551372d0
-              enddo 
+        !----------------------------------------------------------------------------------------------------------------------------------
+        write(info_str,'(2X,A,F20.9,A,F20.9,A)') "| MBD@rsSCS energy   :", ene_mbd_rsSCS," Ha     ",ene_mbd_rsSCS*27.211," eV"
+        call output_string(info_str)
+        !----------------------------------------------------------------------------------------------------------------------------------
 
 
-              write(info_str,'(2x,A)')&
-              "| ---------------------------------------------------------------------------"
-              call output_string(info_str)
-
-              !  
-              ! Compute many-body-dispersion energy new alpha_eff and C6_eff
-
-              call get_mbd_rSCS(ene_mbd_rsSCS)
-              write(info_str,'(2X,A,F20.9,A,F20.9,A)') &
-              "| MBD@rsSCS energy   :", ene_mbd_rsSCS," Ha     ",ene_mbd_rsSCS*27.211," eV"
-              call output_string(info_str)
-
-
- 
+        !----------------------------------------------------------------------------------------------------------------------------------
+        ! clean up
+        !----------------------------------------------------------------------------------------------------------------------------------
         IF(ALLOCATED(R_p))                      DEALLOCATE(R_p)
         IF(ALLOCATED(Rvdw_iso))                 DEALLOCATE(Rvdw_iso)
         IF(ALLOCATED(alpha_omega))              DEALLOCATE(alpha_omega)
@@ -346,7 +342,6 @@ CONTAINS
         REAL*8                        :: r_pp
         REAL*8                        :: Rvdw12
         REAL*8                        :: beta
-        REAL*8                        :: lattice_diag
         
         !----------------------------------------------------------------------------------------------------------------------------------
         ! initio values
@@ -370,7 +365,8 @@ CONTAINS
                 CALL output_string(info_str)
         END SELECT
         !----------------------------------------------------------------------------------------------------------------------------------
-
+        
+        
         !----------------------------------------------------------------------------------------------------------------------------------
         ! compute relay matrix of cluster or unit cell
         !----------------------------------------------------------------------------------------------------------------------------------
@@ -411,22 +407,21 @@ CONTAINS
         !----------------------------------------------------------------------------------------------------------------------------------
         IF (n_periodic .GT. 0) THEN
             relay_matrix_periodic=0.0d0 
-            lattice_diag = SQRT(lattice_vector(1,1)**2 + lattice_vector(2,1)**2 + lattice_vector(3,1)**2)
             !------------------------------------------------------------------------------------------------------------------------------
             IF(.NOT. mbd_scs_vacuum_axis(1)) THEN
-                periodic_cell_i = CEILING((mbd_scs_dip_cutoff/bohr) / lattice_diag)
+                periodic_cell_i = CEILING((mbd_scs_dip_cutoff/bohr) / SQRT(lattice_vector(1,1)**2 + lattice_vector(2,1)**2 + lattice_vector(3,1)**2))
             ELSE
                 periodic_cell_i = 0
             END IF 
             !------------------------------------------------------------------------------------------------------------------------------
             IF(.NOT. mbd_scs_vacuum_axis(2)) THEN
-                periodic_cell_j = CEILING((mbd_scs_dip_cutoff/bohr) / lattice_diag)
+                periodic_cell_j = CEILING((mbd_scs_dip_cutoff/bohr) / SQRT(lattice_vector(1,2)**2 + lattice_vector(2,2)**2 + lattice_vector(3,2)**2))
             ELSE
                 periodic_cell_j = 0
             END IF 
             !------------------------------------------------------------------------------------------------------------------------------
             IF(.NOT. mbd_scs_vacuum_axis(3)) THEN
-                periodic_cell_k = CEILING((mbd_scs_dip_cutoff/bohr) / lattice_diag)
+                periodic_cell_k = CEILING((mbd_scs_dip_cutoff/bohr) / SQRT(lattice_vector(1,3)**2 + lattice_vector(2,3)**2 + lattice_vector(3,3)**2))
             ELSE
                 periodic_cell_k = 0
             END IF 
@@ -604,331 +599,352 @@ subroutine MBD_TENSOR_MBD_rsSCS(dxyz,r_ij,Rvdw12,beta,Tij)
 endsubroutine MBD_TENSOR_MBD_rsSCS
 
 
-subroutine get_mbd_rSCS(ene_mbd_rsSCS)
-
-     ! local vars  
-     real*8,dimension(:,:),allocatable:: cfdm_hamiltonian 
-     real*8,dimension(:,:),allocatable:: cfdm_hamiltonian_periodic
-     real*8,dimension(:,:),allocatable:: coords_SL
-     real*8,dimension(:),allocatable:: cfdm_eigenvalues
-     real*8,dimension(:),allocatable:: omega_cfdm_SL
-     real*8,dimension(:),allocatable:: R_vdw_SL
-     real*8,dimension(:),allocatable::alpha_eff_SL
-     real*8,dimension(:),allocatable:: WORK
-     real*8,dimension(:),allocatable:: task_list_SL  
-     real*8,dimension(3,3):: TPP,lattice_vector_SL
-     real*8,dimension(3)::dxyz,coord_curr
-     real*8:: r_ij
-     real*8:: C6_free
-     real*8:: alpha_free
-     real*8:: R_vdw_free
-     real*8:: Rvdw_12
-     real*8:: beta
-     real*8:: CFDM_prefactor
-     real*8:: E_int
-     real*8:: E_nonint
-     real*8:: sigma
-     real*8:: ene_mbd_rsSCS
-     integer :: errorflag,i_atom,j_atom
-     integer :: SL_i,SL_j,SL_k ! MBD super cell index's
-     integer :: i_index, j_index ! 3x3 block index
-     integer :: i_lattice,j_lattice,k_lattice ! lattice increament index
-     integer :: periodic_cell_i,periodic_cell_j,periodic_cell_k
-     integer :: NIMAG
-     integer ::n_atoms_SL
-     integer :: LWORK
-!     Begin work       
-        select case (flag_xc)
-          case (1) ! PBE
-               beta=0.83
-          case (2) !PBE0
-               beta=0.85
-          case (3) !HSE 
-               beta=0.85
-          case default
-               beta=1.0
-               write(info_str,'(A)')"***  WARNING range seperated parameter beta is not defined for"
-               call output_string(info_str)
-               write(info_str,'(A)')"this fxc defaulting it to 0.0 , which will give MBD energy"
-               call output_string(info_str)
-               write(info_str,'(A)')"WITHOUT short range damping"
-               call output_string(info_str)
-        end select
-
-      if ( n_periodic .eq. 0) then
-      ! For Cluster calculation NO super cell needed 
-      ! intiate this index so as to avoide any invalid floting point when
-      ! normalizing energy in case of cluster/molecule
-      SL_i = 1 
-      SL_j = 1
-      SL_k = 1
-
-!     number of atoms in cluster /molecule
-      n_atoms_SL = n_atoms
- 
-      if(.NOT.allocated(cfdm_hamiltonian))          allocate(cfdm_hamiltonian(3*n_atoms_SL,3*n_atoms_SL)) 
-      if(.NOT.allocated(cfdm_eigenvalues))          allocate(cfdm_eigenvalues(3*n_atoms_SL)) 
-      if(.NOT.allocated(coords_SL))                 allocate(coords_SL(3,n_atoms_SL)) 
-      if(.NOT.allocated(omega_cfdm_SL))             allocate(omega_cfdm_SL(n_atoms_SL))
-      if(.NOT.allocated(R_vdw_SL))                  allocate(R_vdw_SL(n_atoms_SL))
-      if(.NOT.allocated(alpha_eff_SL))              allocate(alpha_eff_SL(n_atoms_SL))
-      if(.NOT.allocated(WORK))                      allocate(WORK((3*n_atoms_SL)*(3+(3*n_atoms_SL)/2)))
-      if(.NOT.allocated(task_list_SL))              allocate(task_list_SL(n_atoms_SL))
-
-      ! MUST BE INTIATED TO ZERO TO AVOID ANY POSSIBLE noise in LAPACK call
-      cfdm_hamiltonian=0.0d0 
-      cfdm_eigenvalues=0.0d0
-
-!     RECOMPUTE TASK LIST DEPENDING ON NUMBER OF ATOMS IN CLUSTER/MOLECULE
-      do i_atom=1,n_atoms_SL
-        task_list_SL(i_atom)   = MOD(i_atom,n_tasks)  
-      enddo
-
-          do i_atom =1,n_atoms
-                  R_vdw_free=0.0d0
-                  alpha_free=0.0d0
-                  C6_free=0.d0
-                  call get_vdw_param(atom_name(i_atom),C6_free,alpha_free,R_vdw_free)
-
-                  R_vdw_SL(i_atom)= R_vdw_free*((alpha_eff(i_atom)/alpha_free)**0.333333333333333333333333333d0)
-                  omega_cfdm_SL(i_atom) = (4.d0/3.d0)*C6_eff(i_atom)/(alpha_eff(i_atom)**2.0)
-                  coords_SL(:,i_atom)   = coords(:,i_atom)
-                  alpha_eff_SL(i_atom) = alpha_eff(i_atom)
-
-         enddo
-      else
-
-      if(.NOT.mbd_scs_vacuum_axis(1)) then
-      SL_i = ceiling((mbd_supercell_cutoff/bohr)/SQRT(lattice_vector(1,1)**2 + lattice_vector(2,1)**2 +lattice_vector(3,1)**2)) 
-      else
-      SL_i = 1 
-      endif
-
-      if(.NOT.mbd_scs_vacuum_axis(2)) then
-      SL_j = ceiling((mbd_supercell_cutoff/bohr)/SQRT(lattice_vector(1,2)**2 + lattice_vector(2,2)**2 +lattice_vector(3,2)**2)) 
-      else
-      SL_j = 1 
-      endif
-
-      if(.NOT.mbd_scs_vacuum_axis(3)) then
-      SL_k = ceiling((mbd_supercell_cutoff/bohr)/SQRT(lattice_vector(1,3)**2 + lattice_vector(2,3)**2 +lattice_vector(3,3)**2)) 
-      else
-      SL_k = 1 
-      endif
-       
-!     number of atoms in super cell 
-      n_atoms_SL = n_atoms*SL_i*SL_j*SL_k 
-      write(info_str,'(2X,A,i3,A,i3,A,i3,A)') &
-         "| Creating super cell of dimension",  SL_i," X ", SL_j," X ", &
-         SL_k, " in MBD calculation" 
-      call output_string(info_str)
-      write(info_str,'(2x,"| containing", I6,A)')n_atoms_SL, "  atom"
-      call output_string(info_str)
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    SUBROUTINE get_mbd_rSCS(ene_mbd_rsSCS)
+    !--------------------------------------------------------------------------------------------------------------------------------------
+        REAL*8,  DIMENSION(:,:), ALLOCATABLE   :: cfdm_hamiltonian 
+        REAL*8,  DIMENSION(:,:), ALLOCATABLE   :: cfdm_hamiltonian_periodic
+        REAL*8,  DIMENSION(:,:), ALLOCATABLE   :: coords_SL
+        REAL*8,  DIMENSION(:),   ALLOCATABLE   :: cfdm_eigenvalues
+        REAL*8,  DIMENSION(:),   ALLOCATABLE   :: omega_cfdm_SL
+        REAL*8,  DIMENSION(:),   ALLOCATABLE   :: R_vdw_SL
+        REAL*8,  DIMENSION(:),   ALLOCATABLE   :: alpha_eff_SL
+        REAL*8,  DIMENSION(:),   ALLOCATABLE   :: WORK
+        REAL*8,  DIMENSION(:),   ALLOCATABLE   :: task_list_SL  
+        REAL*8,  DIMENSION(3,3)                :: TPP
+        REAL*8,  DIMENSION(3,3)                :: lattice_vector_SL
+        REAL*8,  DIMENSION(3)                  :: dxyz,coord_curr
+        REAL*8                                 :: r_ij
+        REAL*8                                 :: C6_free
+        REAL*8                                 :: alpha_free
+        REAL*8                                 :: R_vdw_free
+        REAL*8                                 :: Rvdw_12
+        REAL*8                                 :: beta
+        REAL*8                                 :: CFDM_prefactor
+        REAL*8                                 :: E_int
+        REAL*8                                 :: E_nonint
+        REAL*8                                 :: sigma
+        REAL*8                                 :: ene_mbd_rsSCS
+        INTEGER                                :: errorflag
+        INTEGER                                :: i_atom
+        INTEGER                                :: j_atom
+        INTEGER                                :: SL_i                      ! MBD super cell index's
+        INTEGER                                :: SL_j                      ! MBD super cell index's
+        INTEGER                                :: SL_k                      ! MBD super cell index's
+        INTEGER                                :: i_index                   ! 3x3 block index
+        INTEGER                                :: j_index                   ! 3x3 block index
+        INTEGER                                :: i_lattice                 ! lattice increament index
+        INTEGER                                :: j_lattice                 ! lattice increament index
+        INTEGER                                :: k_lattice                 ! lattice increament index
+        INTEGER                                :: periodic_cell_i
+        INTEGER                                :: periodic_cell_j
+        INTEGER                                :: periodic_cell_k
+        INTEGER                                :: NIMAG
+        INTEGER                                :: n_atoms_SL
+        INTEGER                                :: LWORK
         
-
-
-      if(.NOT.allocated(cfdm_hamiltonian))          allocate(cfdm_hamiltonian(3*n_atoms_SL,3*n_atoms_SL)) 
-      if(.NOT.allocated(cfdm_hamiltonian_periodic)) allocate(cfdm_hamiltonian_periodic(3*n_atoms_SL,3*n_atoms_SL)) 
-      if(.NOT.allocated(cfdm_eigenvalues))          allocate(cfdm_eigenvalues(3*n_atoms_SL)) 
-      if(.NOT.allocated(coords_SL))                 allocate(coords_SL(3,n_atoms_SL)) 
-      if(.NOT.allocated(omega_cfdm_SL))             allocate(omega_cfdm_SL(n_atoms_SL))
-      if(.NOT.allocated(R_vdw_SL))                  allocate(R_vdw_SL(n_atoms_SL))
-      if(.NOT.allocated(alpha_eff_SL))              allocate(alpha_eff_SL(n_atoms_SL))
-      if(.NOT.allocated(WORK))                      allocate(WORK(3*n_atoms_SL*(3+(3*n_atoms_SL)/2)))
-      if(.NOT.allocated(task_list_SL))              allocate(task_list_SL(n_atoms_SL))
-      ! MUST BE INTIATED TO ZERO TO AVOID ANY POSSIBLE noise in LAPACK call
-      cfdm_hamiltonian = 0.0d0 
-      cfdm_eigenvalues = 0.0d0
-      cfdm_hamiltonian_periodic = 0.d0 
-!     RECOMPUTE TASK LIST DEPENDING ON NUMBER OF ATOMS IN SUPERCELL/MOLECULE
-      do i_atom=1,n_atoms_SL 
-        task_list_SL(i_atom)   = MOD(i_atom,n_tasks) 
-      enddo
-
-      ! Get all the parameter  required for MBD with super cell calculation
-       j_atom = 0
-       do i_lattice = 0, SL_i-1,1
-         do j_lattice = 0, SL_j-1,1
-            do k_lattice = 0, SL_k-1,1
-              do i_atom =1,n_atoms !<--- atom index
-                  j_atom = j_atom +1  !<--- dummy index supercell
-                  coords_SL(:,j_atom) = coords(:,i_atom) + i_lattice*lattice_vector(:,1) + &
-                                                           j_lattice*lattice_vector(:,2) + &
-                                                           k_lattice*lattice_vector(:,3)   
-                  R_vdw_free=0.0d0
-                  alpha_free=0.0d0  
-                  call get_vdw_param(atom_name(i_atom),C6_free,alpha_free,R_vdw_free) !FIXME
-
-                  R_vdw_SL(j_atom)=R_vdw_free*((alpha_eff(i_atom)/alpha_free)**0.333333333333333333333333333d0)
-                  alpha_eff_SL(j_atom) = alpha_eff(i_atom)
-                  omega_cfdm_SL(j_atom) =(4.d0/3.d0)*C6_eff(i_atom)/(alpha_eff(i_atom)**2.0)
-              enddo 
-            enddo            
-         enddo            
-       enddo            
-      lattice_vector_SL(:,1)  = lattice_vector(:,1)*SL_i 
-      lattice_vector_SL(:,2)  = lattice_vector(:,2)*SL_j 
-      lattice_vector_SL(:,3)  = lattice_vector(:,3)*SL_k 
-      endif 
-
-      ! Construct CFDM hamiltonian matrix 
-      do i_atom=1,n_atoms_SL,1 !$1
-         if(myid.eq.task_list_SL(i_atom)) then
-         do j_atom=i_atom,n_atoms_SL,1 !$2
-
-         if(i_atom.eq.j_atom) then  !#1
-
-               do i_index=1,3,1
-                  do j_index=1,3,1
-                  if(i_index.eq.j_index) then
-                   cfdm_hamiltonian(3*i_atom-3+i_index,3*j_atom-3+j_index) = omega_cfdm_SL(i_atom)**2.0
-                  endif  
-                  enddo
-               enddo
-
-         else
-            r_ij=0.0d0
-            TPP=0.0d0
-            dxyz=0.d0
-            dxyz(:)= coords_SL(:,i_atom)-coords_SL(:,j_atom)
-            r_ij=dsqrt((dxyz(1))**2.0d0 +(dxyz(2))**2.0d0 + (dxyz(3))**2.0d0 )
-            Rvdw_12=R_vdw_SL(i_atom)+R_vdw_SL(j_atom)
-            sigma=(r_ij/Rvdw_12)**beta
-            call MBD_TENSOR_MBD_rsSCS(dxyz,r_ij,Rvdw_12,beta,TPP)
-            CFDM_prefactor=omega_cfdm_SL(i_atom)*omega_cfdm_SL(j_atom)*dsqrt(alpha_eff_SL(i_atom)*alpha_eff_SL(j_atom))
-
-                   ! Transfer each dipole matrix to CFDM hamiltonian i.j accordingly         
-               do i_index=1,3,1
-                  do j_index=1,3,1
-                   cfdm_hamiltonian(3*i_atom-3+i_index,3*j_atom-3+j_index) = TPP(i_index,j_index)*CFDM_prefactor
-                   cfdm_hamiltonian(3*j_atom-3+j_index,3*i_atom-3+i_index) = TPP(i_index,j_index)*CFDM_prefactor
-                  enddo
-               enddo
-
-         endif !#1
-         enddo !$2
-       endif ! tasks 
-      enddo !$1
-      call sync_tensors(cfdm_hamiltonian,3*n_atoms_SL)
-
-! Adds dipole field due to image cells based spherical cutoff mbd_cfdm_dip_cutoff
-if (n_periodic .gt. 0) then 
-      if(.NOT.mbd_scs_vacuum_axis(1)) then
-      periodic_cell_i = ceiling((mbd_cfdm_dip_cutoff/bohr)/SQRT(lattice_vector_SL(1,1)**2 +&
-                                                                lattice_vector_SL(2,1)**2 +&
-                                                                lattice_vector_SL(3,1)**2))
-      else
-      periodic_cell_i = 0 
-      endif   
-
-      if(.NOT.mbd_scs_vacuum_axis(2)) then
-      periodic_cell_j = ceiling((mbd_cfdm_dip_cutoff/bohr)/SQRT(lattice_vector_SL(1,2)**2 +&
-                                                                lattice_vector_SL(2,2)**2 +&
-                                                                lattice_vector_SL(3,2)**2)) 
-      else
-      periodic_cell_j = 0 
-      endif   
-
-      if(.NOT.mbd_scs_vacuum_axis(3)) then
-      periodic_cell_k = ceiling((mbd_cfdm_dip_cutoff/bohr)/SQRT(lattice_vector_SL(1,3)**2 +&
-                                                                lattice_vector_SL(2,3)**2 +&
-                                                                lattice_vector_SL(3,3)**2)) 
-      else
-      periodic_cell_k = 0 
-      endif  
- 
-      do i_lattice = -periodic_cell_i, periodic_cell_i,1          !$7
-         do j_lattice = -periodic_cell_j, periodic_cell_j,1         !$6  
-            do k_lattice = -periodic_cell_k, periodic_cell_k,1        !$5 
-               if((abs(i_lattice).ne.0).or.(abs(j_lattice).ne.0).or.(abs(k_lattice).ne.0))then!$4
-                do i_atom=1,n_atoms_SL,1 !$3
-                 if(myid.eq.task_list_SL(i_atom)) then !$ tasks
-                  ! LOOP GOES OVER UPPPER TRIANGLE OF HAMILTONIAN 
-                  do j_atom=i_atom,n_atoms_SL,1 !$2
-
-                      r_ij=0.0d0
-                      TPP=0.0d0
-                      dxyz=0.d0
-                      coord_curr(:) = coords_SL(:,i_atom) + i_lattice*lattice_vector_SL(:,1) + &
-                                                            j_lattice*lattice_vector_SL(:,2) + &
-                                                            k_lattice*lattice_vector_SL(:,3)
-
-                      dxyz(:)= coords_SL(:,j_atom)- coord_curr(:)
-                      r_ij=dsqrt((dxyz(1))**2.0d0 +(dxyz(2))**2.0d0 + (dxyz(3))**2.0d0 )
-
-                      if(r_ij.le.mbd_cfdm_dip_cutoff/bohr)  then
+        !----------------------------------------------------------------------------------------------------------------------------------
+        ! set beta
+        !----------------------------------------------------------------------------------------------------------------------------------
+        SELECT CASE (flag_xc)
+            CASE (1) ! PBE
+                beta=0.83
+            CASE (2) !PBE0
+                beta=0.85
+            CASE (3) !HSE 
+                beta=0.85
+            CASE DEFAULT
+                beta=1.0
+                WRITE(info_str,'(A)') "***  WARNING range seperated parameter beta is not defined for"
+                CALL output_string(info_str)
+                WRITE(info_str,'(A)') "this fxc defaulting it to 0.0 , which will give MBD energy"
+                CALL output_string(info_str)
+                WRITE(info_str,'(A)') "WITHOUT short range damping"
+                CALL output_string(info_str)
+        END SELECT
+        !----------------------------------------------------------------------------------------------------------------------------------
+        
+        !----------------------------------------------------------------------------------------------------------------------------------
+        IF ( n_periodic .EQ. 0) THEN
+            !------------------------------------------------------------------------------------------------------------------------------
+            ! For Cluster calculation NO super cell needed intiate this index so as to avoide any invalid 
+            ! floting point when normalizing energy in case of cluster/molecule
+            !------------------------------------------------------------------------------------------------------------------------------
+            SL_i = 1 
+            SL_j = 1
+            SL_k = 1
+            !------------------------------------------------------------------------------------------------------------------------------
+            ! number of atoms in cluster /molecule
+            !------------------------------------------------------------------------------------------------------------------------------
+            n_atoms_SL = n_atoms
+            !------------------------------------------------------------------------------------------------------------------------------
+            IF(.NOT. ALLOCATED(cfdm_hamiltonian))          ALLOCATE(cfdm_hamiltonian(3*n_atoms_SL,3*n_atoms_SL)) 
+            IF(.NOT. ALLOCATED(cfdm_eigenvalues))          ALLOCATE(cfdm_eigenvalues(3*n_atoms_SL)) 
+            IF(.NOT. ALLOCATED(coords_SL))                 ALLOCATE(coords_SL(3,n_atoms_SL)) 
+            IF(.NOT. ALLOCATED(omega_cfdm_SL))             ALLOCATE(omega_cfdm_SL(n_atoms_SL))
+            IF(.NOT. ALLOCATED(R_vdw_SL))                  ALLOCATE(R_vdw_SL(n_atoms_SL))
+            IF(.NOT. ALLOCATED(alpha_eff_SL))              ALLOCATE(alpha_eff_SL(n_atoms_SL))
+            IF(.NOT. ALLOCATED(WORK))                      ALLOCATE(WORK((3*n_atoms_SL)*(3+(3*n_atoms_SL)/2)))
+            IF(.NOT. ALLOCATED(task_list_SL))              ALLOCATE(task_list_SL(n_atoms_SL))
+            !------------------------------------------------------------------------------------------------------------------------------
+            ! MUST BE INTIATED TO ZERO TO AVOID ANY POSSIBLE noise in LAPACK call
+            !------------------------------------------------------------------------------------------------------------------------------
+            cfdm_hamiltonian=0.0d0 
+            cfdm_eigenvalues=0.0d0
+            !------------------------------------------------------------------------------------------------------------------------------
+            ! RECOMPUTE TASK LIST DEPENDING ON NUMBER OF ATOMS IN CLUSTER/MOLECULE
+            !------------------------------------------------------------------------------------------------------------------------------
+            DO i_atom=1,n_atoms_SL
+                task_list_SL(i_atom) = MOD(i_atom,n_tasks)  
+            END DO
+            !------------------------------------------------------------------------------------------------------------------------------
+            DO i_atom =1,n_atoms
+                R_vdw_free=0.0d0
+                alpha_free=0.0d0
+                C6_free=0.d0
+                CALL get_vdw_param(atom_name(i_atom),C6_free,alpha_free,R_vdw_free)
+                !--------------------------------------------------------------------------------------------------------------------------
+                R_vdw_SL(i_atom)= R_vdw_free*((alpha_eff(i_atom)/alpha_free)**0.333333333333333333333333333d0)
+                omega_cfdm_SL(i_atom) = (4.d0/3.d0)*C6_eff(i_atom)/(alpha_eff(i_atom)**2.0)
+                coords_SL(:,i_atom)   = coords(:,i_atom)
+                alpha_eff_SL(i_atom) = alpha_eff(i_atom)
+            END DO
+            !------------------------------------------------------------------------------------------------------------------------------
+        ELSE
+            !------------------------------------------------------------------------------------------------------------------------------
+            IF(.NOT. mbd_scs_vacuum_axis(1)) THEN
+                SL_i = CEILING((mbd_supercell_cutoff/bohr)/SQRT(lattice_vector(1,1)**2 + lattice_vector(2,1)**2 +lattice_vector(3,1)**2))
+            ELSE
+                SL_i = 1 
+            END IF
+            !------------------------------------------------------------------------------------------------------------------------------
+            IF(.NOT. mbd_scs_vacuum_axis(2)) THEN
+                SL_j = CEILING((mbd_supercell_cutoff/bohr)/SQRT(lattice_vector(1,2)**2 + lattice_vector(2,2)**2 +lattice_vector(3,2)**2)) 
+            ELSE
+                SL_j = 1 
+            END IF
+            !------------------------------------------------------------------------------------------------------------------------------
+            IF(.NOT. mbd_scs_vacuum_axis(3)) THEN
+                SL_k = CEILING((mbd_supercell_cutoff/bohr)/SQRT(lattice_vector(1,3)**2 + lattice_vector(2,3)**2 +lattice_vector(3,3)**2)) 
+            ELSE
+                SL_k = 1 
+            END IF
+            !------------------------------------------------------------------------------------------------------------------------------
+          
+            !------------------------------------------------------------------------------------------------------------------------------
+            ! number of atoms in super cell 
+            !------------------------------------------------------------------------------------------------------------------------------
+            n_atoms_SL = n_atoms*SL_i*SL_j*SL_k 
+            !------------------------------------------------------------------------------------------------------------------------------
+            WRITE(info_str,'(2X,A,i3,A,i3,A,i3,A)') "| Creating super cell of dimension",  SL_i," X ", SL_j," X ", SL_k, " in MBD calculation" 
+            CALL output_string(info_str)
+            WRITE(info_str,'(2x,"| containing", I6,A)') n_atoms_SL, "  atom"
+            CALL output_string(info_str)
+            !------------------------------------------------------------------------------------------------------------------------------
+            IF(.NOT. ALLOCATED(cfdm_hamiltonian))             ALLOCATE(cfdm_hamiltonian(3*n_atoms_SL,3*n_atoms_SL)) 
+            IF(.NOT. ALLOCATED(cfdm_hamiltonian_periodic))    ALLOCATE(cfdm_hamiltonian_periodic(3*n_atoms_SL,3*n_atoms_SL)) 
+            IF(.NOT. ALLOCATED(cfdm_eigenvalues))             ALLOCATE(cfdm_eigenvalues(3*n_atoms_SL)) 
+            IF(.NOT. ALLOCATED(coords_SL))                    ALLOCATE(coords_SL(3,n_atoms_SL)) 
+            IF(.NOT. ALLOCATED(omega_cfdm_SL))                ALLOCATE(omega_cfdm_SL(n_atoms_SL))
+            IF(.NOT. ALLOCATED(R_vdw_SL))                     ALLOCATE(R_vdw_SL(n_atoms_SL))
+            IF(.NOT. ALLOCATED(alpha_eff_SL))                 ALLOCATE(alpha_eff_SL(n_atoms_SL))
+            IF(.NOT. ALLOCATED(WORK))                         ALLOCATE(WORK(3*n_atoms_SL*(3+(3*n_atoms_SL)/2)))
+            IF(.NOT. ALLOCATED(task_list_SL))                 ALLOCATE(task_list_SL(n_atoms_SL))
+            !------------------------------------------------------------------------------------------------------------------------------
+            ! MUST BE INTIATED TO ZERO TO AVOID ANY POSSIBLE noise in LAPACK call
+            !------------------------------------------------------------------------------------------------------------------------------
+            cfdm_hamiltonian = 0.0d0 
+            cfdm_eigenvalues = 0.0d0
+            cfdm_hamiltonian_periodic = 0.d0 
+            !------------------------------------------------------------------------------------------------------------------------------
+            ! RECOMPUTE TASK LIST DEPENDING ON NUMBER OF ATOMS IN SUPERCELL/MOLECULE
+            !------------------------------------------------------------------------------------------------------------------------------
+            DO i_atom=1,n_atoms_SL 
+                task_list_SL(i_atom) = MOD(i_atom,n_tasks) 
+            END DO
+            !------------------------------------------------------------------------------------------------------------------------------
+            ! Get all the parameter required for MBD with super cell calculation
+            !------------------------------------------------------------------------------------------------------------------------------
+            j_atom = 0
+            DO i_lattice = 0, SL_i-1
+                DO j_lattice = 0, SL_j-1
+                    DO k_lattice = 0, SL_k-1
+                        DO i_atom = 1, n_atoms             ! <--- atom index
+                            j_atom = j_atom +1             ! <--- dummy index supercell
+                            coords_SL(:,j_atom) = coords(:,i_atom) + i_lattice*lattice_vector(:,1) + j_lattice*lattice_vector(:,2) + k_lattice*lattice_vector(:,3)   
+                            R_vdw_free=0.0d0
+                            alpha_free=0.0d0  
+                            CALL get_vdw_param(atom_name(i_atom),C6_free,alpha_free,R_vdw_free) !FIXME
+                            
+                            R_vdw_SL(j_atom)=R_vdw_free*((alpha_eff(i_atom)/alpha_free)**0.333333333333333333333333333d0)
+                            alpha_eff_SL(j_atom) = alpha_eff(i_atom)
+                            omega_cfdm_SL(j_atom) =(4.d0/3.d0)*C6_eff(i_atom)/(alpha_eff(i_atom)**2.0)
+                        END DO 
+                    END DO            
+                END DO            
+            END DO            
+            lattice_vector_SL(:,1)  = lattice_vector(:,1)*SL_i 
+            lattice_vector_SL(:,2)  = lattice_vector(:,2)*SL_j 
+            lattice_vector_SL(:,3)  = lattice_vector(:,3)*SL_k 
+            !------------------------------------------------------------------------------------------------------------------------------
+        END IF 
+        !----------------------------------------------------------------------------------------------------------------------------------
+        
+        !----------------------------------------------------------------------------------------------------------------------------------
+        ! Construct CFDM hamiltonian matrix 
+        !----------------------------------------------------------------------------------------------------------------------------------
+        DO i_atom=1,n_atoms_SL
+            IF(myid .EQ. task_list_SL(i_atom)) THEN
+                DO j_atom=i_atom,n_atoms_SL
+                    IF(i_atom .EQ. j_atom) THEN
+                        DO i_index=1,3
+                            DO j_index=1,3
+                                IF(i_index .EQ. j_index) THEN
+                                    cfdm_hamiltonian(3*i_atom-3+i_index,3*j_atom-3+j_index) = omega_cfdm_SL(i_atom)**2.0
+                                END IF  
+                            END DO
+                        END DO
+                    ELSE
+                        r_ij = 0.0d0
+                        TPP  = 0.0d0
+                        dxyz = 0.d0
+                        dxyz(:) = coords_SL(:,i_atom)-coords_SL(:,j_atom)
+                        r_ij=DSQRT((dxyz(1))**2.0d0 +(dxyz(2))**2.0d0 + (dxyz(3))**2.0d0 )
                         Rvdw_12=R_vdw_SL(i_atom)+R_vdw_SL(j_atom)
                         sigma=(r_ij/Rvdw_12)**beta
-                        call MBD_TENSOR_MBD_rsSCS(dxyz,r_ij,Rvdw_12,beta,TPP) 
-                        CFDM_prefactor=omega_cfdm_SL(i_atom)*omega_cfdm_SL(j_atom)*&
-                                        sqrt(alpha_eff_SL(i_atom)*alpha_eff_SL(j_atom))
-                        do i_index=1,3,1
-                          do j_index=1,3,1
-                          !FILL UPPER BLOCK
-                          cfdm_hamiltonian_periodic(3*i_atom-3+i_index,3*j_atom-3+j_index)=&
-                          cfdm_hamiltonian_periodic(3*i_atom-3+i_index,3*j_atom-3+j_index)+ (TPP(i_index,j_index)*CFDM_prefactor)
-                          !FILL LOWER BLOCK ALSO MAKE SURE THAT YOU DONT ADD FIELD
-                          !CONTRIBUTION TWO TIMES IN DIAGONAL BLOCK below is the
-                          !check
-                          if(i_atom.NE.j_atom) then
-                          cfdm_hamiltonian_periodic(3*j_atom-3+j_index,3*i_atom-3+i_index)=&
-                          cfdm_hamiltonian_periodic(3*j_atom-3+j_index,3*i_atom-3+i_index)+ (TPP(i_index,j_index)*CFDM_prefactor)
-                          endif
-                         enddo
-                        enddo
-                      endif 
-
-                  enddo !$2
-                 endif !$tasks
-                enddo !$3
-               endif !$4
-            enddo !$5
-         enddo !$6
-      enddo !$7
-   call sync_tensors(cfdm_hamiltonian_periodic,3*n_atoms_SL)    
-   cfdm_hamiltonian = cfdm_hamiltonian + cfdm_hamiltonian_periodic
-endif
-
-    errorflag=0
-    LWORK=3*n_atoms_SL*(3+(3*n_atoms_SL)/2)
-    call DSYEV('V','U',3*n_atoms_SL,cfdm_hamiltonian,3*n_atoms_SL,cfdm_eigenvalues,WORK,LWORK,errorflag)
-
-    E_int=0.0d0
-    E_nonint =0.0d0
-    ene_mbd_rsSCS =   0.0
-    NIMAG=0 
-    if (errorflag.eq.0) then
-             do i_atom =1,n_atoms_SL
-             E_nonint = E_nonint + omega_cfdm_SL(i_atom)    
-             enddo
-
-             do i_atom =1,3*n_atoms_SL
-              if(cfdm_eigenvalues(i_atom).ge.0.d0) then
-                E_int = E_int + dsqrt(cfdm_eigenvalues(i_atom))
-              else
-                NIMAG= NIMAG +1  
-              endif 
-             enddo
-
-         ene_mbd_rsSCS = ((0.5*E_int)-(1.5* E_nonint))/(SL_i*SL_j*SL_k)
-         if(NIMAG.gt.0) then
-         write(info_str,'(A,I4,A)')"***WARNING: found ",NIMAG," negative eigenvalues in MBD energy calculation."
-         call output_string(info_str)  
-         endif
-    else
-           write(info_str,*)"***Error:- Digonalization of CFDM hamiltonian failed"
-           call output_string(info_str)
-    endif
-   !
-      if(allocated(cfdm_hamiltonian))          deallocate(cfdm_hamiltonian)
-      if(allocated(cfdm_hamiltonian_periodic)) deallocate(cfdm_hamiltonian_periodic) 
-      if(allocated(cfdm_eigenvalues))          deallocate(cfdm_eigenvalues)
-      if(allocated(coords_SL))                 deallocate(coords_SL)
-      if(allocated(omega_cfdm_SL))             deallocate(omega_cfdm_SL)
-      if(allocated(R_vdw_SL))                  deallocate(R_vdw_SL)
-      if(allocated(alpha_eff_SL))              deallocate(alpha_eff_SL)  
-  return
-  endsubroutine get_mbd_rSCS
+                        CALL MBD_TENSOR_MBD_rsSCS(dxyz,r_ij,Rvdw_12,beta,TPP)
+                        CFDM_prefactor=omega_cfdm_SL(i_atom)*omega_cfdm_SL(j_atom)*DSQRT(alpha_eff_SL(i_atom)*alpha_eff_SL(j_atom))
+                        
+                        ! Transfer each dipole matrix to CFDM hamiltonian i.j accordingly         
+                        DO i_index=1,3
+                            DO j_index=1,3
+                                cfdm_hamiltonian(3*i_atom-3+i_index,3*j_atom-3+j_index) = TPP(i_index,j_index)*CFDM_prefactor
+                                cfdm_hamiltonian(3*j_atom-3+j_index,3*i_atom-3+i_index) = TPP(i_index,j_index)*CFDM_prefactor
+                            END DO
+                        END DO
+                    END IF
+                END DO
+            END IF
+        END DO
+        !----------------------------------------------------------------------------------------------------------------------------------
+        
+        CALL sync_tensors(cfdm_hamiltonian,3*n_atoms_SL)
+        
+        !----------------------------------------------------------------------------------------------------------------------------------
+        ! Adds dipole field due to image cells based spherical cutoff mbd_cfdm_dip_cutoff
+        !----------------------------------------------------------------------------------------------------------------------------------
+        IF (n_periodic .GT. 0) THEN 
+            IF(.NOT. mbd_scs_vacuum_axis(1)) THEN
+                periodic_cell_i = CEILING((mbd_cfdm_dip_cutoff/bohr)/SQRT(lattice_vector_SL(1,1)**2 + lattice_vector_SL(2,1)**2 + lattice_vector_SL(3,1)**2))
+            ELSE
+                periodic_cell_i = 0 
+            END IF   
+            
+            IF (.NOT. mbd_scs_vacuum_axis(2)) THEN
+                periodic_cell_j = CEILING((mbd_cfdm_dip_cutoff/bohr)/SQRT(lattice_vector_SL(1,2)**2 + lattice_vector_SL(2,2)**2 + lattice_vector_SL(3,2)**2)) 
+            ELSE
+                periodic_cell_j = 0 
+            END IF   
+            
+            IF (.NOT.mbd_scs_vacuum_axis(3)) THEN
+                periodic_cell_k = CEILING((mbd_cfdm_dip_cutoff/bohr)/SQRT(lattice_vector_SL(1,3)**2 + lattice_vector_SL(2,3)**2 + lattice_vector_SL(3,3)**2)) 
+            ELSE
+                periodic_cell_k = 0 
+            END IF
+         
+            DO i_lattice = -periodic_cell_i, periodic_cell_i
+                DO j_lattice = -periodic_cell_j, periodic_cell_j
+                    DO k_lattice = -periodic_cell_k, periodic_cell_k
+                        IF((ABS(i_lattice) .NE. 0) .OR. (ABS(j_lattice) .NE. 0) .OR. (ABS(k_lattice) .NE. 0)) THEN
+                            DO i_atom=1,n_atoms_SL
+                                IF(myid .EQ. task_list_SL(i_atom)) THEN
+                                    ! LOOP GOES OVER UPPPER TRIANGLE OF HAMILTONIAN 
+                                    DO j_atom=i_atom,n_atoms_SL
+                                        r_ij=0.0d0
+                                        TPP=0.0d0
+                                        dxyz=0.d0
+                                        coord_curr(:) = coords_SL(:,i_atom) + i_lattice*lattice_vector_SL(:,1) + &
+                                                                              j_lattice*lattice_vector_SL(:,2) + &
+                                                                              k_lattice*lattice_vector_SL(:,3)
+                                        dxyz(:) = coords_SL(:,j_atom) - coord_curr(:)
+                                        r_ij = DSQRT((dxyz(1))**2.0d0 +(dxyz(2))**2.0d0 + (dxyz(3))**2.0d0 )
+                                        
+                                        IF(r_ij .LE. mbd_cfdm_dip_cutoff/bohr) THEN
+                                            Rvdw_12=R_vdw_SL(i_atom)+R_vdw_SL(j_atom)
+                                            sigma=(r_ij/Rvdw_12)**beta
+                                            CALL MBD_TENSOR_MBD_rsSCS(dxyz,r_ij,Rvdw_12,beta,TPP) 
+                                            CFDM_prefactor=omega_cfdm_SL(i_atom)*omega_cfdm_SL(j_atom) * SQRT(alpha_eff_SL(i_atom)*alpha_eff_SL(j_atom))
+                                            DO i_index=1,3
+                                                DO j_index=1,3
+                                                    ! FILL UPPER BLOCK
+                                                    cfdm_hamiltonian_periodic(3*i_atom-3+i_index,3*j_atom-3+j_index) = &
+                                                    cfdm_hamiltonian_periodic(3*i_atom-3+i_index,3*j_atom-3+j_index) + (TPP(i_index,j_index)*CFDM_prefactor)
+                                                    ! FILL LOWER BLOCK ALSO MAKE SURE THAT YOU DONT ADD FIELD
+                                                    ! CONTRIBUTION TWO TIMES IN DIAGONAL BLOCK below is the check
+                                                    IF (i_atom .NE. j_atom) THEN
+                                                        cfdm_hamiltonian_periodic(3*j_atom-3+j_index,3*i_atom-3+i_index) = &
+                                                        cfdm_hamiltonian_periodic(3*j_atom-3+j_index,3*i_atom-3+i_index) + (TPP(i_index,j_index)*CFDM_prefactor)
+                                                    END IF
+                                                END DO
+                                            END DO
+                                        END IF 
+                                    END DO
+                                END IF
+                            END DO
+                        END IF
+                    END DO
+                END DO
+            END DO
+            CALL sync_tensors(cfdm_hamiltonian_periodic,3*n_atoms_SL)    
+            cfdm_hamiltonian = cfdm_hamiltonian + cfdm_hamiltonian_periodic
+        END IF
+        
+        errorflag=0
+        LWORK=3*n_atoms_SL*(3+(3*n_atoms_SL)/2)
+        CALL DSYEV('V','U',3*n_atoms_SL,cfdm_hamiltonian,3*n_atoms_SL,cfdm_eigenvalues,WORK,LWORK,errorflag)
+        
+        E_int=0.0d0
+        E_nonint =0.0d0
+        ene_mbd_rsSCS = 0.0
+        NIMAG=0 
+        IF(errorflag .EQ. 0) THEN
+            DO i_atom = 1,n_atoms_SL
+                E_nonint = E_nonint + omega_cfdm_SL(i_atom)    
+            END DO
+            
+            DO i_atom =1,3*n_atoms_SL
+                IF(cfdm_eigenvalues(i_atom) .GE. 0.0d0) THEN
+                    E_int = E_int + DSQRT(cfdm_eigenvalues(i_atom))
+                ELSE
+                    NIMAG= NIMAG +1  
+                END IF 
+            END DO
+            
+            ene_mbd_rsSCS = ((0.5*E_int)-(1.5* E_nonint))/(SL_i*SL_j*SL_k)
+            IF(NIMAG .GT. 0) THEN
+                WRITE(info_str,'(A,I4,A)')"***WARNING: found ",NIMAG," negative eigenvalues in MBD energy calculation."
+                CALL output_string(info_str)  
+            END IF
+        ELSE
+            WRITE(info_str,*)"***Error:- Digonalization of CFDM hamiltonian failed"
+            CALL output_string(info_str)
+        END IF
+        
+        !----------------------------------------------------------------------------------------------------------------------------------
+        ! clean up
+        !----------------------------------------------------------------------------------------------------------------------------------
+        IF(ALLOCATED(cfdm_hamiltonian))             DEALLOCATE(cfdm_hamiltonian)
+        IF(ALLOCATED(cfdm_hamiltonian_periodic))    DEALLOCATE(cfdm_hamiltonian_periodic) 
+        IF(ALLOCATED(cfdm_eigenvalues))             DEALLOCATE(cfdm_eigenvalues)
+        IF(ALLOCATED(coords_SL))                    DEALLOCATE(coords_SL)
+        IF(ALLOCATED(omega_cfdm_SL))                DEALLOCATE(omega_cfdm_SL)
+        IF(ALLOCATED(R_vdw_SL))                     DEALLOCATE(R_vdw_SL)
+        IF(ALLOCATED(alpha_eff_SL))                 DEALLOCATE(alpha_eff_SL)  
+        !----------------------------------------------------------------------------------------------------------------------------------
+        RETURN
+        !----------------------------------------------------------------------------------------------------------------------------------
+    END SUBROUTINE get_mbd_rSCS
+    !--------------------------------------------------------------------------------------------------------------------------------------
 
 
 
@@ -1023,8 +1039,6 @@ endsubroutine get_alpha_omega_and_Rp
             !------------------------------------------------------------------------------------------------------------------------------
             LWORK=9  
             CALL DSYEV('V','U',3,matrix,3,eigen,WORK,LWORK,errorflag)   ! JJ: why is this symmetric ??
-            WRITE(*,*) "----------------------------"
-            WRITE(*,*) matrix
             iso_polar_coupled(i_row) = sum(eigen)/3.d0
         END DO
         !----------------------------------------------------------------------------------------------------------------------------------
