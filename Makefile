@@ -1,10 +1,20 @@
-FC=mpif90
-MKL_ROOT=/home/junteng/intel/mkl/lib/intel64
-LAPACKBLAS = -L$(MKL_ROOT) -Wl,--start-group -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -Wl,--end-group -lpthread
-FFLAGS =  -O3 -ip -check bounds -check uninit -check pointers -traceback -g -fpe0
+FC = mpif90
+LD = mpif90
+MKLROOT = /home/junteng/intel/mkl
+FFLAGS  = -g -O3 -qopt-report=5 -qopt-report-phase=vec -qopt-report-phase=par -align array64byte -assume byterecl -D__INTEL -fpp -xCORE-AVX2 -fpic -ip -check bounds -check uninit -check pointers -traceback -g -fpe0
+LDFLAGS = -L${MKLROOT}/lib/intel64 -lmkl_scalapack_lp64 -lmkl_intel_lp64 -lmkl_core -lmkl_sequential -lmkl_blacs_intelmpi_lp64 -lpthread -lm -ldl
 
-install :
-	$(FC) $(FFLAGS) -o DFT_MBD_AT_rsSCS.x UTILS.F90 MBD_AT_rsSCS.F90 $(LAPACKBLAS) 
+exec: UTILS.o MBD_rsSCS.o 
+	${LD} -o pmbd.x UTILS.o MBD_rsSCS.o ${LDFLAGS}
+
+MBD_rsSCS.o: MBD_rsSCS.f90
+	${FC} -o MBD_rsSCS.o -c MBD_rsSCS.f90 ${FFLAGS}
+
+UTILS.o: UTILS.f90
+	${FC} -o UTILS.o -c UTILS.f90 ${FFLAGS}
+
+test:
+	mpiexec -n 4 ./pmbd.x C6H6.in setting.in > out
 
 clean: 
-	rm -f *.o  *.mod *.x
+	rm -f *.o  *.mod *.x *.optrpt out
