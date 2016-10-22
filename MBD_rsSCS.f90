@@ -15,7 +15,7 @@ PROGRAM MBD_rsSCS
     INTEGER                      ::   i_index
     INTEGER                      ::   j_index
     REAL*8                       ::   ene_mbd_rsSCS
-    INTEGER, DIMENSION(5)        ::   input_settings
+    INTEGER, DIMENSION(7)        ::   input_settings
     !---------------------------------------------------------------------
 
     !---------------------------------------------------------------------
@@ -31,7 +31,7 @@ PROGRAM MBD_rsSCS
     !---------------------------------------------------------------------
     ! print parallelization info
     !---------------------------------------------------------------------
-    IF (myid==0) WRITE(*,'(2X,A,I8,1X,A)') "Using ",n_tasks, "parallel tasks."
+    IF (iproc==0) WRITE(*,'(2X,A,I8,1X,A)') "Using ",nproc, "parallel tasks."
     !---------------------------------------------------------------------
 
     !---------------------------------------------------------------------
@@ -107,6 +107,14 @@ PROGRAM MBD_rsSCS
                 BACKSPACE(111)
                 input_settings(5)=1
                 READ(111,*,IOSTAT=io_line) dster, mbd_scs_vacuum_axis(:)
+            ELSE IF(INDEX(string,"nprow") .GE. 1) THEN
+                BACKSPACE(111)
+                input_settings(6)=1
+                READ(111,*,IOSTAT=io_line) dster, nprow
+            ELSE IF(INDEX(string,"npcol") .GE. 1) THEN
+                BACKSPACE(111)
+                input_settings(7)=1
+                READ(111,*,IOSTAT=io_line) dster, npcol
             END IF
         END DO
         CLOSE(111)
@@ -116,7 +124,7 @@ PROGRAM MBD_rsSCS
     !---------------------------------------------------------------------
     ! print geometry and settings info
     !---------------------------------------------------------------------
-    IF (myid==0) THEN  
+    IF (iproc==0) THEN  
         WRITE(*,'(3x,A)')"|----------------------------------Input Geometry----------------------------------" 
         WRITE(*,'(3x,A,I5)') "Number of atoms",n_atoms
         WRITE(*,*) 
@@ -126,7 +134,7 @@ PROGRAM MBD_rsSCS
         WRITE(*,'(3x,A)')"|----------------------------------------------------------------------------------"
     END IF
     !---------------------------------------------------------------------
-    IF (myid==0)THEN
+    IF (iproc==0)THEN
         WRITE(*,'(3x,A)')"|--------------------------------MBD@rSCS Settings---------------------------"
         IF(input_settings(1) .EQ. 1)THEN
             IF(flag_xc .EQ. 1) THEN
@@ -194,6 +202,9 @@ PROGRAM MBD_rsSCS
     ! major calculation
     !---------------------------------------------------------------------
     CALL allocate_task()
+    WRITE(*,*) "initializing blacs"
+    CALL init_blacs()
+    WRITE(*,*) "blacs initialized"
     CALL MBD_at_rsSCS(ene_mbd_rsSCS)
     !---------------------------------------------------------------------
 

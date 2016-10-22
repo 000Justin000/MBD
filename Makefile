@@ -14,7 +14,7 @@ UTILS.o: UTILS.f90
 	${FC} -o UTILS.o -c UTILS.f90 ${FFLAGS}
 
 test:
-	mpiexec -n 4 ./pmbd.x C6H6.in setting.in > out
+	mpiexec -n 4 ./pmbd.x C6H6.in settings.in > out
 
 clean: 
 	rm -f *.o  *.mod *.x *.optrpt out

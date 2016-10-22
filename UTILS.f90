@@ -15,8 +15,8 @@ MODULE  UTILS
     !--------------------------------------------------------------------------------------------------------------------------------------
     INTEGER                                     ::   flag_xc
     INTEGER                                     ::   n_periodic
-    REAL*8                                      ::   mbd_cfdm_dip_cutoff 
     REAL*8                                      ::   mbd_supercell_cutoff  
+    REAL*8                                      ::   mbd_cfdm_dip_cutoff 
     REAL*8                                      ::   mbd_scs_dip_cutoff
     LOGICAL,                  DIMENSION(3)      ::   mbd_scs_vacuum_axis
     !--------------------------------------------------------------------------------------------------------------------------------------
@@ -42,10 +42,20 @@ MODULE  UTILS
     !--------------------------------------------------------------------------------------------------------------------------------------
     ! mpi
     !--------------------------------------------------------------------------------------------------------------------------------------
-    INTEGER                                     ::   myid     
-    INTEGER                                     ::   mpiierror                    ! mpi_error_handler 
-    INTEGER                                     ::   n_tasks                      ! number of theads    
+    INTEGER                                     ::   nproc                        ! number of processes
+    INTEGER                                     ::   iproc                        ! process id
+    INTEGER                                     ::   ierr                         ! error handle
     INTEGER                                     ::   n_atoms                      ! number of atoms
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    ! scalapack
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    INTEGER                                     ::   nprow                        ! processes grid along row
+    INTEGER                                     ::   npcol                        ! processes grid along col
+    INTEGER                                     ::   ipcol                        ! process id along row
+    INTEGER                                     ::   iprow                        ! process id along col
+    INTEGER                                     ::   icontxt                      ! blacs related
+    INTEGER                                     ::   desc_A(9)                    ! description of A matrix
+    INTEGER                                     ::   desc_B(9)                    ! description of B matrix
     !--------------------------------------------------------------------------------------------------------------------------------------
 
 CONTAINS
@@ -54,15 +64,15 @@ CONTAINS
     SUBROUTINE init_constants()
         !----------------------------------------------------------------------------------------------------------------------------------
         flag_xc                = 1                                                ! XC= PBE
-        mbd_cfdm_dip_cutoff    = 100.d0                                           ! Angstrom
-        mbd_supercell_cutoff   = 25.d0                                            ! Angstrom
-        mbd_scs_dip_cutoff     = 120.0                                            ! Angstrom
+        mbd_supercell_cutoff   =  25.0D0                                          ! Angstrom
+        mbd_cfdm_dip_cutoff    = 100.0D0                                          ! Angstrom
+        mbd_scs_dip_cutoff     = 120.0D0                                          ! Angstrom
         n_periodic             = 0  
-        bohr                   = 0.52917721d0
+        bohr                   = 0.52917721D0
         pi                     = 3.14159265358979323846d0
-        mbd_scs_vacuum_axis(1) = .false. 
-        mbd_scs_vacuum_axis(2) = .false. 
-        mbd_scs_vacuum_axis(3) = .false. 
+        mbd_scs_vacuum_axis(1) = .FALSE. 
+        mbd_scs_vacuum_axis(2) = .FALSE. 
+        mbd_scs_vacuum_axis(3) = .FALSE. 
         !----------------------------------------------------------------------------------------------------------------------------------
     END SUBROUTINE init_constants
     !--------------------------------------------------------------------------------------------------------------------------------------
@@ -70,9 +80,9 @@ CONTAINS
     !--------------------------------------------------------------------------------------------------------------------------------------
     SUBROUTINE start_mpi()
         !----------------------------------------------------------------------------------------------------------------------------------
-        CALL MPI_INIT (mpiierror)
-        CALL MPI_COMM_RANK (MPI_COMM_WORLD, myid,    mpiierror)
-        CALL MPI_COMM_SIZE (MPI_COMM_WORLD, n_tasks, mpiierror)
+        CALL MPI_INIT (ierr)
+        CALL MPI_COMM_RANK (MPI_COMM_WORLD, iproc, ierr)
+        CALL MPI_COMM_SIZE (MPI_COMM_WORLD, nproc, ierr)
         !----------------------------------------------------------------------------------------------------------------------------------
     END SUBROUTINE
     !--------------------------------------------------------------------------------------------------------------------------------------
@@ -80,9 +90,9 @@ CONTAINS
     !--------------------------------------------------------------------------------------------------------------------------------------
     SUBROUTINE stop_mpi()
         !----------------------------------------------------------------------------------------------------------------------------------
-        CALL MPI_FINALIZE(mpiierror)
-        IF(mpiierror.ne.0) WRITE(*,*) "ERROR in terminating MPI"
-        IF(mpiierror.ne.0) WRITE(*,*) "Normal Termination"
+        CALL MPI_FINALIZE(ierr)
+        IF(ierr.ne.0) WRITE(*,*) "ERROR in terminating MPI"
+        IF(ierr.ne.0) WRITE(*,*) "Normal Termination"
         STOP
         !----------------------------------------------------------------------------------------------------------------------------------
     END SUBROUTINE
@@ -95,10 +105,19 @@ CONTAINS
         !----------------------------------------------------------------------------------------------------------------------------------
         IF(.NOT. ALLOCATED(task_list)) ALLOCATE(task_list(n_atoms))
         DO i_row=1,n_atoms
-            task_list(i_row) = MOD(i_row,n_tasks)
+            task_list(i_row) = MOD(i_row,nproc)
         END DO
         !----------------------------------------------------------------------------------------------------------------------------------
     END SUBROUTINE allocate_task
+    !--------------------------------------------------------------------------------------------------------------------------------------
+
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    SUBROUTINE init_blacs()
+        CALL BLACS_GET(0, 0, icontxt)
+        CALL BLACS_GRIDINIT(icontxt, "Row", nprow, npcol)
+        CALL BLACS_GRIDINFO(icontxt, nprow, npcol, iprow, ipcol)
+        WRITE(*,"(A,I1,A,I1,A,I1,A,I1,A,I1)") "nproc=",nproc,"   iproc=",iproc,"   iprow=",iprow,"   ipcol=",ipcol,"   icontxt=",icontxt
+    END SUBROUTINE init_blacs
     !--------------------------------------------------------------------------------------------------------------------------------------
 
     !--------------------------------------------------------------------------------------------------------------------------------------
@@ -108,7 +127,7 @@ CONTAINS
         REAL*8, DIMENSION(num_element,num_element)   :: temp_matrix
         REAL*8, DIMENSION(num_element,num_element)   :: temp_matrix_mpi
         !----------------------------------------------------------------------------------------------------------------------------------
-        call MPI_ALLREDUCE(temp_matrix, temp_matrix_mpi, num_element*num_element, MPI_DOUBLE_PRECISION, MPI_SUM,MPI_COMM_WORLD, mpiierror)
+        call MPI_ALLREDUCE(temp_matrix, temp_matrix_mpi, num_element*num_element, MPI_DOUBLE_PRECISION, MPI_SUM,MPI_COMM_WORLD, ierr)
         temp_matrix = temp_matrix_mpi
         !----------------------------------------------------------------------------------------------------------------------------------
     END SUBROUTINE
@@ -370,7 +389,7 @@ CONTAINS
         ! compute relay matrix of cluster or unit cell
         !----------------------------------------------------------------------------------------------------------------------------------
         DO i_row=1,n_atoms                                 ! loop through block index i
-            IF(myid .EQ. task_list(i_row)) THEN      
+            IF(iproc .EQ. task_list(i_row)) THEN      
                 DO i_col=i_row,n_atoms                     ! loop through block index j
                     TPP=0.0d0
                     IF(i_row .EQ. i_col) THEN              ! diagonal block
@@ -432,7 +451,7 @@ CONTAINS
                     DO k_lattice = -periodic_cell_k, periodic_cell_k,1
                         IF((ABS(i_lattice) .NE. 0) .OR. (ABS(j_lattice) .NE. 0) .OR. (ABS(k_lattice) .NE. 0)) THEN !#1
                             DO i_row = 1, n_atoms
-                                IF(myid .EQ. task_list(i_row)) THEN
+                                IF(iproc .EQ. task_list(i_row)) THEN
                                     DO i_col = i_row, n_atoms
                                         !-------------------------------------------------------------------------------------------------
                                         coord_curr = 0.d0
@@ -694,7 +713,7 @@ endsubroutine MBD_TENSOR_MBD_rsSCS
             ! RECOMPUTE TASK LIST DEPENDING ON NUMBER OF ATOMS IN CLUSTER/MOLECULE
             !------------------------------------------------------------------------------------------------------------------------------
             DO i_atom=1,n_atoms_SL
-                task_list_SL(i_atom) = MOD(i_atom,n_tasks)  
+                task_list_SL(i_atom) = MOD(i_atom,nproc)  
             END DO
             !------------------------------------------------------------------------------------------------------------------------------
             DO i_atom =1,n_atoms
@@ -759,7 +778,7 @@ endsubroutine MBD_TENSOR_MBD_rsSCS
             ! RECOMPUTE TASK LIST DEPENDING ON NUMBER OF ATOMS IN SUPERCELL/MOLECULE
             !------------------------------------------------------------------------------------------------------------------------------
             DO i_atom=1,n_atoms_SL 
-                task_list_SL(i_atom) = MOD(i_atom,n_tasks) 
+                task_list_SL(i_atom) = MOD(i_atom,nproc) 
             END DO
             !------------------------------------------------------------------------------------------------------------------------------
             ! Get all the parameter required for MBD with super cell calculation
@@ -793,7 +812,7 @@ endsubroutine MBD_TENSOR_MBD_rsSCS
         ! Construct CFDM hamiltonian matrix 
         !----------------------------------------------------------------------------------------------------------------------------------
         DO i_atom=1,n_atoms_SL
-            IF(myid .EQ. task_list_SL(i_atom)) THEN
+            IF(iproc .EQ. task_list_SL(i_atom)) THEN
                 DO j_atom=i_atom,n_atoms_SL
                     IF(i_atom .EQ. j_atom) THEN
                         DO i_index=1,3
@@ -856,7 +875,7 @@ endsubroutine MBD_TENSOR_MBD_rsSCS
                     DO k_lattice = -periodic_cell_k, periodic_cell_k
                         IF((ABS(i_lattice) .NE. 0) .OR. (ABS(j_lattice) .NE. 0) .OR. (ABS(k_lattice) .NE. 0)) THEN
                             DO i_atom=1,n_atoms_SL
-                                IF(myid .EQ. task_list_SL(i_atom)) THEN
+                                IF(iproc .EQ. task_list_SL(i_atom)) THEN
                                     ! LOOP GOES OVER UPPPER TRIANGLE OF HAMILTONIAN 
                                     DO j_atom=i_atom,n_atoms_SL
                                         r_ij=0.0d0
@@ -1461,7 +1480,7 @@ endsubroutine MBD_TENSOR_MBD_rsSCS
         !----------------------------------------------------------------------------------------------------------------------------------
         CHARACTER*500 :: info_str  
         !----------------------------------------------------------------------------------------------------------------------------------
-        IF(myid .EQ. 0) WRITE(*,*)TRIM(info_str)
+        IF(iproc .EQ. 0) WRITE(*,*)TRIM(info_str)
         !----------------------------------------------------------------------------------------------------------------------------------
     END SUBROUTINE output_string
     !--------------------------------------------------------------------------------------------------------------------------------------
@@ -1469,4 +1488,3 @@ endsubroutine MBD_TENSOR_MBD_rsSCS
 !------------------------------------------------------------------------------------------------------------------------------------------
 END MODULE UTILS
 !------------------------------------------------------------------------------------------------------------------------------------------
-
