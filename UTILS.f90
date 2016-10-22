@@ -1,3 +1,4 @@
+!------------------------------------------------------------------------------------------------------------------------------------------
 MODULE  UTILS
 !------------------------------------------------------------------------------------------------------------------------------------------
     USE MPI
@@ -9,7 +10,6 @@ MODULE  UTILS
     !--------------------------------------------------------------------------------------------------------------------------------------
     REAL*8                                      ::   bohr
     REAL*8                                      ::   pi
-    REAL*8                                      ::   three_by_pi 
     !--------------------------------------------------------------------------------------------------------------------------------------
     ! input setting
     !--------------------------------------------------------------------------------------------------------------------------------------
@@ -60,7 +60,6 @@ CONTAINS
         n_periodic             = 0  
         bohr                   = 0.52917721d0
         pi                     = 3.14159265358979323846d0
-        three_by_pi            = 0.954929658551372d0
         mbd_scs_vacuum_axis(1) = .false. 
         mbd_scs_vacuum_axis(2) = .false. 
         mbd_scs_vacuum_axis(3) = .false. 
@@ -946,25 +945,25 @@ endsubroutine MBD_TENSOR_MBD_rsSCS
     END SUBROUTINE get_mbd_rSCS
     !--------------------------------------------------------------------------------------------------------------------------------------
 
-
-
-subroutine get_alpha_omega_and_Rp(HF,C6_free,alpha_free,w,a_w,Rpw)
-       implicit none
-       real*8,intent(in)::HF,C6_free,alpha_free,w
-       real*8,intent(out)::a_w,Rpw
-       real*8::eff_freq,w_eff_freq_ratio
-       ! alpha(iomega)
-       eff_freq=0.0d0
-       w_eff_freq_ratio=0.0d0
-       eff_freq= ((4.d0/3.d0)*C6_free/(alpha_free**2.0))**2
-       w_eff_freq_ratio=(w*w)/eff_freq
-       a_w=(HF*alpha_free)/(1.0+w_eff_freq_ratio)
-
-       !Rp(iomega) ! Rp_eff definition from   A. Mayer, Phys. Rev. B, 75,045407(2007)
-       Rpw= ((a_w/3.d0)*dsqrt(2.0d0/pi))**0.333333333333333333333333333d0
-
-       return
-endsubroutine get_alpha_omega_and_Rp
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    SUBROUTINE get_alpha_omega_and_Rp(HF,C6_free,alpha_free,w,a_w,Rpw)
+        implicit none
+        real*8,intent(in)::HF,C6_free,alpha_free,w
+        real*8,intent(out)::a_w,Rpw
+        real*8::eff_freq,w_eff_freq_ratio
+        ! alpha(iomega)
+        eff_freq=0.0d0
+        w_eff_freq_ratio=0.0d0
+        eff_freq= ((4.d0/3.d0)*C6_free/(alpha_free**2.0))**2
+        w_eff_freq_ratio=(w*w)/eff_freq
+        a_w=(HF*alpha_free)/(1.0+w_eff_freq_ratio)
+     
+        !Rp(iomega) ! Rp_eff definition from   A. Mayer, Phys. Rev. B, 75,045407(2007)
+        Rpw= ((a_w/3.d0)*dsqrt(2.0d0/pi))**0.333333333333333333333333333d0
+        
+        RETURN
+    END SUBROUTINE get_alpha_omega_and_Rp
+    !--------------------------------------------------------------------------------------------------------------------------------------
 
     !--------------------------------------------------------------------------------------------------------------------------------------
     SUBROUTINE contract_matrix(tensor)
@@ -1046,419 +1045,428 @@ endsubroutine get_alpha_omega_and_Rp
     END SUBROUTINE calculate_screened_polarizability
     !--------------------------------------------------------------------------------------------------------------------------------------
 
-
-
-subroutine gauss_legendre_grid()
-         casimir_omega(0) = 0.0000000 ;  casimir_omega_weight(0) = 0.0000000
-         casimir_omega(1) = 0.0392901 ;  casimir_omega_weight(1) = 0.0786611
-         casimir_omega(2) = 0.1183580 ;  casimir_omega_weight(2) = 0.0796400
-         casimir_omega(3) = 0.1989120 ;  casimir_omega_weight(3) = 0.0816475
-         casimir_omega(4) = 0.2820290 ;  casimir_omega_weight(4) = 0.0847872
-         casimir_omega(5) = 0.3689190 ;  casimir_omega_weight(5) = 0.0892294
-         casimir_omega(6) = 0.4610060 ;  casimir_omega_weight(6) = 0.0952317
-         casimir_omega(7) = 0.5600270 ;  casimir_omega_weight(7) = 0.1031720
-         casimir_omega(8) = 0.6681790 ;  casimir_omega_weight(8) = 0.1136050
-         casimir_omega(9) = 0.7883360 ;  casimir_omega_weight(9) = 0.1273500
-        casimir_omega(10) = 0.9243900 ; casimir_omega_weight(10) = 0.1456520
-        casimir_omega(11) = 1.0817900 ; casimir_omega_weight(11) = 0.1704530
-        casimir_omega(12) = 1.2684900 ; casimir_omega_weight(12) = 0.2049170
-        casimir_omega(13) = 1.4966100 ; casimir_omega_weight(13) = 0.2544560
-        casimir_omega(14) = 1.7856300 ; casimir_omega_weight(14) = 0.3289620
-        casimir_omega(15) = 2.1691700 ; casimir_omega_weight(15) = 0.4480920
-        casimir_omega(16) = 2.7106200 ; casimir_omega_weight(16) = 0.6556060
-        casimir_omega(17) = 3.5457300 ; casimir_omega_weight(17) = 1.0659600
-        casimir_omega(18) = 5.0273400 ; casimir_omega_weight(18) = 2.0635700
-        casimir_omega(19) = 8.4489600 ; casimir_omega_weight(19) = 5.6851000
-        casimir_omega(20) = 25.451700 ; casimir_omega_weight(20) = 50.955800
-return
-endsubroutine gauss_legendre_grid
-
-! Free-atom C6, polarizability and vdW radius
-subroutine get_vdw_param(atom,C6, alpha, R0)
-implicit none
-
-! local variables
-character*2 :: atom
-real*8 :: C6
-real*8 :: alpha
-real*8 :: R0
-
-select case (atom)
-case('H')
-
-alpha=4.500000
-C6=6.500000
-R0=3.100000
-
-case('He')
-alpha=1.380000
-C6=1.460000
-R0=2.650000
-
-case('Li')
-alpha=164.200000
-C6=1387.000000
-R0=4.160000
-
-case('Be')
-alpha=38.000000
-C6=214.000000
-R0=4.170000
-
-case('B')
-alpha=21.000000
-C6=99.500000
-R0=3.890000
-
-case('C')
-alpha=12.000000
-C6=46.600000
-R0=3.590000
-
-case('N')
-alpha=7.400000
-C6=24.200000
-R0=3.340000
-
-case('O')
-alpha=5.400000
-C6=15.600000
-R0=3.190000
-
-case('F')
-alpha=3.800000
-C6=9.520000
-R0=3.040000
-
-case('Ne')
-alpha=2.670000
-C6=6.380000
-R0=2.910000
-
-case('Na')
-alpha=162.700000
-C6=1556.000000
-R0=3.730000
-
-case('Mg')
-alpha=71.000000
-C6=627.000000
-R0=4.270000
-
-case('Al')
-alpha=60.000000
-C6=528.000000
-R0=4.330000
-
-case('Si')
-alpha=37.000000
-C6=305.000000
-R0=4.200000
-
-case('P')
-alpha=25.000000
-C6=185.000000
-R0=4.010000
-
-case('S')
-alpha=19.600000
-C6=134.000000
-R0=3.860000
-
-case('Cl')
-alpha=15.000000
-C6=94.600000
-R0=3.710000
-
-case('Ar')
-alpha=11.100000
-C6=64.300000
-R0=3.550000
-
-case('K')
-alpha=292.900000
-C6=3897.000000
-R0=3.710000
-
-case('Ca')
-alpha=160.000000
-C6=2221.000000
-R0=4.650000
-
-case('Sc')
-alpha=120.000000
-C6=1383.000000
-R0=4.590000
-
-case('Ti')
-alpha=98.000000
-C6=1044.000000
-R0=4.510000
-
-case('V')
-alpha=84.000000
-C6=832.000000
-R0=4.440000
-
-case('Cr')
-alpha=78.000000
-C6=602.000000
-R0=3.990000
-
-case('Mn')
-alpha=63.000000
-C6=552.000000
-R0=3.970000
-
-case('Fe')
-alpha=56.000000
-C6=482.000000
-R0=4.230000
-
-case('Co')
-alpha=50.000000
-C6=408.000000
-R0=4.180000
-
-case('Ni')
-alpha=48.000000
-C6=373.000000
-R0=3.820000
-
-case('Cu')
-alpha=42.000000
-C6=253.000000
-R0=3.760000
-
-case('Zn')
-alpha=40.000000
-C6=284.000000
-R0=4.020000
-
-case('Ga')
-alpha=60.000000
-C6=498.000000
-R0=4.190000
-
-case('Ge')
-alpha=41.000000
-C6=354.000000
-R0=4.200000
-
-case('As')
-alpha=29.000000
-C6=246.000000
-R0=4.110000
-
-case('Se')
-alpha=25.000000
-C6=210.000000
-R0=4.040000
-
-case('Br')
-alpha=20.000000
-C6=162.000000
-R0=3.930000
-
-case('Kr')
-alpha=16.800000
-C6=129.600000
-R0=3.820000
-
-case('Rb')
-alpha=319.200000
-C6=4691.000000
-R0=3.720000
-
-case('Sr')
-alpha=199.000000
-C6=3170.000000
-R0=4.540000
-
-case('Y')
-alpha=126.7370
-C6=1968.580
-R0=4.81510
-
-case('Zr')
-alpha=119.97
-C6=1677.91
-R0=4.53
-
-case('Nb')
-alpha=101.603
-C6=1263.61
-R0=4.2365
-
-case('Mo')
-alpha=88.4225785
-C6=1028.73
-R0=4.099
-
-case('Tc')
-alpha=80.083
-C6=1390.87
-R0=4.076
-
-case('Ru')
-alpha=65.8950
-C6=609.754
-R0=3.99530
-
-case('Rh')
-alpha=56.1
-C6=469.0
-R0=3.95
-
-case('Pd')
-alpha=23.680000
-C6=157.500000
-R0=3.66000
-
-case('Ag')
-alpha=50.600000
-C6=339.000000
-R0=3.820000
-
-case('Cd')
-alpha=39.7
-C6=452.0
-R0=3.99
-
-case('In')
-alpha=70.22000
-C6=707.046000
-R0=4.23198000
-
-case('Sn')
-alpha=55.9500
-C6=587.41700
-R0=4.303000
-
-case('Sb')
-alpha=43.671970 
-C6=459.322
-R0=4.2760
-
-case('Te')
-alpha=37.65
-C6=396.0
-R0=4.22
-
-case('I')
-alpha=35.000000
-C6=385.000000
-R0=4.170000
-
-case('Xe')
-alpha=27.300000
-C6=285.900000
-R0=4.080000
-
-case('Cs')
-alpha=427.12
-C6=6582.08
-R0=3.78
-
-case('Ba')
-alpha=275.0
-C6=5727.0
-R0=4.77
-
-case('Hf')
-alpha=99.52
-C6=1274.8
-R0=4.21
-
-case('Ta')
-alpha=82.53
-C6=1019.92
-R0=4.15
-
-case('W')
-alpha=71.041
-C6=847.93
-R0=4.08
-
-case('Re')
-alpha=63.04
-C6=710.2
-R0=4.02
-
-case('Os')
-alpha=55.055
-C6=596.67
-R0=3.84
-
-case('Ir')
-alpha=42.51
-C6=359.1
-R0=4.00
-
-case('Pt')
-alpha=39.68
-C6=347.1
-R0=3.92
-
-case('Au')
-alpha=36.5
-C6=298.0
-R0=3.86
-
-case('Hg')
-alpha=33.9
-C6=392.0
-R0=3.98
-
-case('Tl')
-alpha=69.92
-C6=717.44
-R0=3.91
-
-case('Pb')
-alpha=61.8
-C6=697.0
-R0=4.31
-
-case('Bi')
-alpha=49.02
-C6=571.0
-R0=4.32
-
-case('Po')
-alpha=45.013
-C6=530.92
-R0=4.097
-
-case('At')
-alpha=38.93
-C6=457.53
-R0=4.07
-
-case('Rn')
-alpha=33.54
-C6=390.63
-R0=4.23
-
-case default
-   C6=0.0 
-   alpha=1.0
-   R0=1.0
-   write(info_str,'(1X,4A)') '*** WARNING: VdW parameters not defined for atom: ', atom
-   call output_string(info_str)
-   stop
-
-end select
-
-end subroutine get_vdw_param
-
-
-subroutine output_string(info_str)
-character*400 :: info_str  
-if(myid.eq.0) write(*,*)trim(info_str)
-endsubroutine output_string
-
-
-!-------------------------------------------------------------------------
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    SUBROUTINE gauss_legendre_grid()
+        casimir_omega( 0) = 0.0000000; casimir_omega_weight( 0) = 0.0000000
+        casimir_omega( 1) = 0.0392901; casimir_omega_weight( 1) = 0.0786611
+        casimir_omega( 2) = 0.1183580; casimir_omega_weight( 2) = 0.0796400
+        casimir_omega( 3) = 0.1989120; casimir_omega_weight( 3) = 0.0816475
+        casimir_omega( 4) = 0.2820290; casimir_omega_weight( 4) = 0.0847872
+        casimir_omega( 5) = 0.3689190; casimir_omega_weight( 5) = 0.0892294
+        casimir_omega( 6) = 0.4610060; casimir_omega_weight( 6) = 0.0952317
+        casimir_omega( 7) = 0.5600270; casimir_omega_weight( 7) = 0.1031720
+        casimir_omega( 8) = 0.6681790; casimir_omega_weight( 8) = 0.1136050
+        casimir_omega( 9) = 0.7883360; casimir_omega_weight( 9) = 0.1273500
+        casimir_omega(10) = 0.9243900; casimir_omega_weight(10) = 0.1456520
+        casimir_omega(11) = 1.0817900; casimir_omega_weight(11) = 0.1704530
+        casimir_omega(12) = 1.2684900; casimir_omega_weight(12) = 0.2049170
+        casimir_omega(13) = 1.4966100; casimir_omega_weight(13) = 0.2544560
+        casimir_omega(14) = 1.7856300; casimir_omega_weight(14) = 0.3289620
+        casimir_omega(15) = 2.1691700; casimir_omega_weight(15) = 0.4480920
+        casimir_omega(16) = 2.7106200; casimir_omega_weight(16) = 0.6556060
+        casimir_omega(17) = 3.5457300; casimir_omega_weight(17) = 1.0659600
+        casimir_omega(18) = 5.0273400; casimir_omega_weight(18) = 2.0635700
+        casimir_omega(19) = 8.4489600; casimir_omega_weight(19) = 5.6851000
+        casimir_omega(20) = 25.451700; casimir_omega_weight(20) = 50.955800
+        RETURN
+    END SUBROUTINE gauss_legendre_grid
+    !--------------------------------------------------------------------------------------------------------------------------------------
+
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    SUBROUTINE get_vdw_param(atom,C6, alpha, R0)
+        !----------------------------------------------------------------------------------------------------------------------------------
+        ! Free-atom C6, polarizability and vdW radius
+        !----------------------------------------------------------------------------------------------------------------------------------
+        IMPLICIT NONE
+        !----------------------------------------------------------------------------------------------------------------------------------
+        CHARACTER*2 :: atom
+        REAL*8      :: C6
+        REAL*8      :: alpha
+        REAL*8      :: R0
+        !----------------------------------------------------------------------------------------------------------------------------------
+        
+        SELECT CASE (atom)
+        
+        case('H')
+        alpha=4.500000
+        C6=6.500000
+        R0=3.100000
+        
+        case('He')
+        alpha=1.380000
+        C6=1.460000
+        R0=2.650000
+        
+        case('Li')
+        alpha=164.200000
+        C6=1387.000000
+        R0=4.160000
+        
+        case('Be')
+        alpha=38.000000
+        C6=214.000000
+        R0=4.170000
+        
+        case('B')
+        alpha=21.000000
+        C6=99.500000
+        R0=3.890000
+        
+        case('C')
+        alpha=12.000000
+        C6=46.600000
+        R0=3.590000
+        
+        case('N')
+        alpha=7.400000
+        C6=24.200000
+        R0=3.340000
+        
+        case('O')
+        alpha=5.400000
+        C6=15.600000
+        R0=3.190000
+        
+        case('F')
+        alpha=3.800000
+        C6=9.520000
+        R0=3.040000
+        
+        case('Ne')
+        alpha=2.670000
+        C6=6.380000
+        R0=2.910000
+        
+        case('Na')
+        alpha=162.700000
+        C6=1556.000000
+        R0=3.730000
+        
+        case('Mg')
+        alpha=71.000000
+        C6=627.000000
+        R0=4.270000
+        
+        case('Al')
+        alpha=60.000000
+        C6=528.000000
+        R0=4.330000
+        
+        case('Si')
+        alpha=37.000000
+        C6=305.000000
+        R0=4.200000
+        
+        case('P')
+        alpha=25.000000
+        C6=185.000000
+        R0=4.010000
+        
+        case('S')
+        alpha=19.600000
+        C6=134.000000
+        R0=3.860000
+        
+        case('Cl')
+        alpha=15.000000
+        C6=94.600000
+        R0=3.710000
+        
+        case('Ar')
+        alpha=11.100000
+        C6=64.300000
+        R0=3.550000
+        
+        case('K')
+        alpha=292.900000
+        C6=3897.000000
+        R0=3.710000
+        
+        case('Ca')
+        alpha=160.000000
+        C6=2221.000000
+        R0=4.650000
+        
+        case('Sc')
+        alpha=120.000000
+        C6=1383.000000
+        R0=4.590000
+        
+        case('Ti')
+        alpha=98.000000
+        C6=1044.000000
+        R0=4.510000
+        
+        case('V')
+        alpha=84.000000
+        C6=832.000000
+        R0=4.440000
+        
+        case('Cr')
+        alpha=78.000000
+        C6=602.000000
+        R0=3.990000
+        
+        case('Mn')
+        alpha=63.000000
+        C6=552.000000
+        R0=3.970000
+        
+        case('Fe')
+        alpha=56.000000
+        C6=482.000000
+        R0=4.230000
+        
+        case('Co')
+        alpha=50.000000
+        C6=408.000000
+        R0=4.180000
+        
+        case('Ni')
+        alpha=48.000000
+        C6=373.000000
+        R0=3.820000
+        
+        case('Cu')
+        alpha=42.000000
+        C6=253.000000
+        R0=3.760000
+        
+        case('Zn')
+        alpha=40.000000
+        C6=284.000000
+        R0=4.020000
+        
+        case('Ga')
+        alpha=60.000000
+        C6=498.000000
+        R0=4.190000
+        
+        case('Ge')
+        alpha=41.000000
+        C6=354.000000
+        R0=4.200000
+        
+        case('As')
+        alpha=29.000000
+        C6=246.000000
+        R0=4.110000
+        
+        case('Se')
+        alpha=25.000000
+        C6=210.000000
+        R0=4.040000
+        
+        case('Br')
+        alpha=20.000000
+        C6=162.000000
+        R0=3.930000
+        
+        case('Kr')
+        alpha=16.800000
+        C6=129.600000
+        R0=3.820000
+        
+        case('Rb')
+        alpha=319.200000
+        C6=4691.000000
+        R0=3.720000
+        
+        case('Sr')
+        alpha=199.000000
+        C6=3170.000000
+        R0=4.540000
+        
+        case('Y')
+        alpha=126.7370
+        C6=1968.580
+        R0=4.81510
+        
+        case('Zr')
+        alpha=119.97
+        C6=1677.91
+        R0=4.53
+        
+        case('Nb')
+        alpha=101.603
+        C6=1263.61
+        R0=4.2365
+        
+        case('Mo')
+        alpha=88.4225785
+        C6=1028.73
+        R0=4.099
+        
+        case('Tc')
+        alpha=80.083
+        C6=1390.87
+        R0=4.076
+        
+        case('Ru')
+        alpha=65.8950
+        C6=609.754
+        R0=3.99530
+        
+        case('Rh')
+        alpha=56.1
+        C6=469.0
+        R0=3.95
+        
+        case('Pd')
+        alpha=23.680000
+        C6=157.500000
+        R0=3.66000
+        
+        case('Ag')
+        alpha=50.600000
+        C6=339.000000
+        R0=3.820000
+        
+        case('Cd')
+        alpha=39.7
+        C6=452.0
+        R0=3.99
+        
+        case('In')
+        alpha=70.22000
+        C6=707.046000
+        R0=4.23198000
+        
+        case('Sn')
+        alpha=55.9500
+        C6=587.41700
+        R0=4.303000
+        
+        case('Sb')
+        alpha=43.671970 
+        C6=459.322
+        R0=4.2760
+        
+        case('Te')
+        alpha=37.65
+        C6=396.0
+        R0=4.22
+        
+        case('I')
+        alpha=35.000000
+        C6=385.000000
+        R0=4.170000
+        
+        case('Xe')
+        alpha=27.300000
+        C6=285.900000
+        R0=4.080000
+        
+        case('Cs')
+        alpha=427.12
+        C6=6582.08
+        R0=3.78
+        
+        case('Ba')
+        alpha=275.0
+        C6=5727.0
+        R0=4.77
+        
+        case('Hf')
+        alpha=99.52
+        C6=1274.8
+        R0=4.21
+        
+        case('Ta')
+        alpha=82.53
+        C6=1019.92
+        R0=4.15
+        
+        case('W')
+        alpha=71.041
+        C6=847.93
+        R0=4.08
+        
+        case('Re')
+        alpha=63.04
+        C6=710.2
+        R0=4.02
+        
+        case('Os')
+        alpha=55.055
+        C6=596.67
+        R0=3.84
+        
+        case('Ir')
+        alpha=42.51
+        C6=359.1
+        R0=4.00
+        
+        case('Pt')
+        alpha=39.68
+        C6=347.1
+        R0=3.92
+        
+        case('Au')
+        alpha=36.5
+        C6=298.0
+        R0=3.86
+        
+        case('Hg')
+        alpha=33.9
+        C6=392.0
+        R0=3.98
+        
+        case('Tl')
+        alpha=69.92
+        C6=717.44
+        R0=3.91
+        
+        case('Pb')
+        alpha=61.8
+        C6=697.0
+        R0=4.31
+        
+        case('Bi')
+        alpha=49.02
+        C6=571.0
+        R0=4.32
+        
+        case('Po')
+        alpha=45.013
+        C6=530.92
+        R0=4.097
+        
+        case('At')
+        alpha=38.93
+        C6=457.53
+        R0=4.07
+        
+        case('Rn')
+        alpha=33.54
+        C6=390.63
+        R0=4.23
+        
+        case default
+        C6=0.0 
+        alpha=1.0
+        R0=1.0
+        write(info_str,'(1X,4A)') '*** WARNING: VdW parameters not defined for atom: ', atom
+        call output_string(info_str)
+        stop
+        
+        END SELECT
+        !----------------------------------------------------------------------------------------------------------------------------------
+    END SUBROUTINE get_vdw_param
+    !--------------------------------------------------------------------------------------------------------------------------------------
+
+
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    SUBROUTINE output_string(info_str)
+        !----------------------------------------------------------------------------------------------------------------------------------
+        CHARACTER*500 :: info_str  
+        !----------------------------------------------------------------------------------------------------------------------------------
+        IF(myid .EQ. 0) WRITE(*,*)TRIM(info_str)
+        !----------------------------------------------------------------------------------------------------------------------------------
+    END SUBROUTINE output_string
+    !--------------------------------------------------------------------------------------------------------------------------------------
+
+!------------------------------------------------------------------------------------------------------------------------------------------
 END MODULE UTILS
+!------------------------------------------------------------------------------------------------------------------------------------------
 
