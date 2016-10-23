@@ -11,6 +11,7 @@ MODULE  UTILS
     REAL*8                                      ::   bohr
     REAL*8                                      ::   pi
     REAL*8                                      ::   eps
+    REAL*8                                      ::   otd                                                                          ! 1.0/3.0
     !--------------------------------------------------------------------------------------------------------------------------------------
     ! input setting
     !--------------------------------------------------------------------------------------------------------------------------------------
@@ -28,14 +29,15 @@ MODULE  UTILS
     REAL*8,      ALLOCATABLE, DIMENSION(:,:)    ::   coords
     REAL*8,                   DIMENSION(3,3)    ::   lattice_vector
     !--------------------------------------------------------------------------------------------------------------------------------------
+    INTEGER,                  DIMENSION(2,3)    ::   scsimage                     ! cell index range for periodic images
     INTEGER,     ALLOCATABLE, DIMENSION(:)      ::   task_list
+    REAL*8                                      ::   beta
     REAL*8,      ALLOCATABLE, DIMENSION(:)      ::   alpha_eff                    ! screened polarizability @ 0 Hz
     REAL*8,      ALLOCATABLE, DIMENSION(:,:)    ::   coupled_atom_pol             ! screened polarizability @ a certain frequency
     REAL*8,      ALLOCATABLE, DIMENSION(:,:)    ::   relay_matrix                 ! 3N x 3N (imaginary) frequency dependent matrix
-    REAL*8,      ALLOCATABLE, DIMENSION(:,:)    ::   relay_matrix_periodic
     REAL*8,      ALLOCATABLE, DIMENSION(:,:)    ::   screened_alpha
     REAL*8,      ALLOCATABLE, DIMENSION(:)      ::   alpha_omega
-    REAL*8,      ALLOCATABLE, DIMENSION(:)      ::   R_p                          ! effective dipole spread of QHO, [PRB,75,045407(2007)]
+    REAL*8,      ALLOCATABLE, DIMENSION(:)      ::   sgm                          ! effective dipole spread of QHO, [PRB,75,045407(2007)]
     REAL*8,      ALLOCATABLE, DIMENSION(:)      ::   Rvdw_iso                             
     REAL*8,      ALLOCATABLE, DIMENSION(:)      ::   C6_eff
     REAL*8,                   DIMENSION(3,3)    ::   mol_pol_tensor
@@ -73,7 +75,8 @@ CONTAINS
         mbd_scs_dip_cutoff     = 120.0D0                                          ! Angstrom
         n_periodic             = 0  
         bohr                   = 0.52917721D0
-        pi                     = 3.14159265358979323846d0
+        pi                     = 3.14159265358979323846D0
+        otd                    = 0.33333333333333333333D0
         eps                    = 10e-6
         mbd_scs_vacuum_axis(1) = .FALSE. 
         mbd_scs_vacuum_axis(2) = .FALSE. 
@@ -125,14 +128,15 @@ CONTAINS
     !--------------------------------------------------------------------------------------------------------------------------------------
 
     !--------------------------------------------------------------------------------------------------------------------------------------
-    SUBROUTINE sync_tensors(temp_matrix,num_element)
+    SUBROUTINE sync_tensors(matrix,nrow,ncol)
         !----------------------------------------------------------------------------------------------------------------------------------
-        INTEGER                                      :: num_element
-        REAL*8, DIMENSION(num_element,num_element)   :: temp_matrix
-        REAL*8, DIMENSION(num_element,num_element)   :: temp_matrix_mpi
+        INTEGER                                      :: nrow
+        INTEGER                                      :: ncol
+        REAL*8,  DIMENSION(nrow,ncol)                :: matrix
+        REAL*8,  DIMENSION(nrow,ncol)                :: matrix_reduce
         !----------------------------------------------------------------------------------------------------------------------------------
-        call MPI_ALLREDUCE(temp_matrix, temp_matrix_mpi, num_element*num_element, MPI_DOUBLE_PRECISION, MPI_SUM,MPI_COMM_WORLD, ierr)
-        temp_matrix = temp_matrix_mpi
+        call MPI_ALLREDUCE(matrix, matrix_reduce, nrow*ncol, MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, ierr)
+        matrix = matrix_reduce
         !----------------------------------------------------------------------------------------------------------------------------------
     END SUBROUTINE
     !--------------------------------------------------------------------------------------------------------------------------------------
@@ -160,7 +164,7 @@ CONTAINS
         !----------------------------------------------------------------------------------------------------------------------------------
         ! o hirshfeld_volume from hirshfeld partioning 
         ! o relay_matrix is 3N x 3N (imaginary) frequency dependent matrix
-        ! o R_p is effective dipole spread of quantum harmonic oscilator
+        ! o sgm is effective dipole spread of quantum harmonic oscilator
         ! o alpha_omega is single pole polarizability of atom in molecule
         ! o coupled_atom_pol contains atom resolved screened polarizabilities at every imaginary frequency 
         ! o alpha_eff is atom resolved screened polarizabilty at ZERO frequency 
@@ -177,30 +181,28 @@ CONTAINS
         !----------------------------------------------------------------------------------------------------------------------------------
         ! JJ: as distributed computing, you can not allocate the same matrix everywhere 3N*3N
         !----------------------------------------------------------------------------------------------------------------------------------
-        IF(.NOT. ALLOCATED(relay_matrix))              ALLOCATE(relay_matrix(3*n_atoms,3*n_atoms))
+        IF(.NOT. ALLOCATED(relay_matrix))              ALLOCATE(relay_matrix(3*loc_row,3*loc_col))
         IF(.NOT. ALLOCATED(screened_alpha))            ALLOCATE(screened_alpha(n_atoms,3))
-        IF(.NOT. ALLOCATED(R_p))                       ALLOCATE(R_p(n_atoms))
+        IF(.NOT. ALLOCATED(sgm))                       ALLOCATE(sgm(n_atoms))
         IF(.NOT. ALLOCATED(Rvdw_iso))                  ALLOCATE(Rvdw_iso(n_atoms))
         IF(.NOT. ALLOCATED(alpha_omega))               ALLOCATE(alpha_omega(n_atoms))
         IF(.NOT. ALLOCATED(coupled_atom_pol))          ALLOCATE(coupled_atom_pol(20,n_atoms))
         IF(.NOT. ALLOCATED(alpha_eff))                 ALLOCATE(alpha_eff(n_atoms))
         IF(.NOT. ALLOCATED(C6_eff))                    ALLOCATE(C6_eff(n_atoms))
         !----------------------------------------------------------------------------------------------------------------------------------
-        IF(n_periodic .GT. 0) THEN
-            IF(.NOT. ALLOCATED(relay_matrix_periodic)) ALLOCATE(relay_matrix_periodic(3*n_atoms,3*n_atoms))
-        END IF
-        !----------------------------------------------------------------------------------------------------------------------------------
-        
+     
         !----------------------------------------------------------------------------------------------------------------------------------
         ! Initialization
         !----------------------------------------------------------------------------------------------------------------------------------
         C6_eff               = 0.0D0 
         alpha_eff            = 0.0D0
         mol_c6_coeff         = 0.0D0
-        screened_alpha       = 0.0D0
         coupled_atom_pol     = 0.0D0
         casimir_omega        = 0.0D0
         casimir_omega_weight = 0.0D0 
+        !----------------------------------------------------------------------------------------------------------------------------------
+        CALL get_beta()
+        CALL get_scs_image()
         CALL gauss_legendre_grid()
         !----------------------------------------------------------------------------------------------------------------------------------
         
@@ -227,42 +229,31 @@ CONTAINS
             !------------------------------------------------------------------------------------------------------------------------------
             ! zeroout array before getting actual frequency dependent parameters
             !------------------------------------------------------------------------------------------------------------------------------
-            R_p            = 0.0d0
-            Rvdw_iso       = 0.0d0 
-            alpha_omega    = 0.0d0
-            relay_matrix   = 0.0d0
-            mol_pol_tensor = 0.0d0
+            sgm            = 0.0D0
+            Rvdw_iso       = 0.0D0 
+            alpha_omega    = 0.0D0
+            mol_pol_tensor = 0.0D0
+            screened_alpha = 0.0D0
             !------------------------------------------------------------------------------------------------------------------------------
             
             !------------------------------------------------------------------------------------------------------------------------------
-            ! compute frequency dependent proprieties (R_p)
+            ! compute frequency dependent proprieties
             !------------------------------------------------------------------------------------------------------------------------------
             DO i_myatom=1,n_atoms
                 CALL get_vdw_param(atom_name(i_myatom),C6_free,alpha_free,R_vdw_free)
-                CALL get_alpha_omega_and_Rp(hirshfeld_volume(i_myatom),C6_free,alpha_free,casimir_omega(i_freq),alpha_omega(i_myatom),R_p(i_myatom))
-                Rvdw_iso(i_myatom)= (hirshfeld_volume(i_myatom)**0.333333333333333333333333333d0)*R_vdw_free
+                CALL get_alpha_omega_and_sgm(hirshfeld_volume(i_myatom),C6_free,alpha_free,casimir_omega(i_freq),alpha_omega(i_myatom),sgm(i_myatom))
+                Rvdw_iso(i_myatom) = (hirshfeld_volume(i_myatom)**otd)*R_vdw_free               ! JJ : tight
             END DO
             !------------------------------------------------------------------------------------------------------------------------------
             
             !------------------------------------------------------------------------------------------------------------------------------
-            ! compute screened polarizability using isotropically damped tensor, (OUT: relay_matrix^{-1})
-            !------------------------------------------------------------------------------------------------------------------------------
-            CALL calculate_scs_matrix() 
-            !------------------------------------------------------------------------------------------------------------------------------
-            
-            !------------------------------------------------------------------------------------------------------------------------------
-            ! Contract relay_matrix^-1 for polarizability (3*3 block)
-            !------------------------------------------------------------------------------------------------------------------------------
-            CALL contract_matrix(mol_pol_tensor)                                                                            ! equation (18)
-            !------------------------------------------------------------------------------------------------------------------------------
-            
-            !------------------------------------------------------------------------------------------------------------------------------
-            ! get coupled atomic "local" polarizability by summing over row or columns of relay tensor
+            ! 1. get coupled atomic "local" polarizability by summing over row or columns of relay tensor, 
+            ! 2. get the mol_pol_tensor by summing over the whole relay_matrix
             !------------------------------------------------------------------------------------------------------------------------------
             IF(i_freq .EQ. 0) THEN
-               CALL calculate_screened_polarizability(alpha_eff)                                                    ! static polarizability
+               CALL get_screened_alpha(alpha_eff)                                                                   ! static polarizability
             ELSE
-               CALL calculate_screened_polarizability(coupled_atom_pol(i_freq,:))                      ! frequency dependent polarizability
+               CALL get_screened_alpha(coupled_atom_pol(i_freq,:))                                     ! frequency dependent polarizability
             END IF 
             !------------------------------------------------------------------------------------------------------------------------------
             
@@ -303,7 +294,7 @@ CONTAINS
             !------------------------------------------------------------------------------------------------------------------------------
             C6_atom = 0.0d0 
             !------------------------------------------------------------------------------------------------------------------------------
-            DO i_freq=1,20,1
+            DO i_freq=1,20
                 C6_atom = C6_atom + (casimir_omega_weight(i_freq)*coupled_atom_pol(i_freq,i_myatom)**2)
             END DO
             !------------------------------------------------------------------------------------------------------------------------------
@@ -331,15 +322,13 @@ CONTAINS
         call output_string(info_str)
         !----------------------------------------------------------------------------------------------------------------------------------
 
-
         !----------------------------------------------------------------------------------------------------------------------------------
         ! clean up
         !----------------------------------------------------------------------------------------------------------------------------------
-        IF(ALLOCATED(R_p))                      DEALLOCATE(R_p)
+        IF(ALLOCATED(sgm))                      DEALLOCATE(sgm)
         IF(ALLOCATED(Rvdw_iso))                 DEALLOCATE(Rvdw_iso)
         IF(ALLOCATED(alpha_omega))              DEALLOCATE(alpha_omega)
         IF(ALLOCATED(relay_matrix))             DEALLOCATE(relay_matrix)
-        IF(ALLOCATED(relay_matrix_periodic))    DEALLOCATE(relay_matrix_periodic)
         IF(ALLOCATED(coupled_atom_pol))         DEALLOCATE(coupled_atom_pol)
         IF(ALLOCATED(alpha_eff))                DEALLOCATE(alpha_eff)
         IF(ALLOCATED(C6_eff))                   DEALLOCATE(C6_eff)
@@ -350,33 +339,7 @@ CONTAINS
     !--------------------------------------------------------------------------------------------------------------------------------------
 
     !--------------------------------------------------------------------------------------------------------------------------------------
-    SUBROUTINE calculate_scs_matrix()
-    !--------------------------------------------------------------------------------------------------------------------------------------
-        INTEGER                       :: i_row
-        INTEGER                       :: i_col
-        INTEGER                       :: i_index
-        INTEGER                       :: j_index
-        INTEGER                       :: i_lattice
-        INTEGER                       :: j_lattice
-        INTEGER                       :: k_lattice
-        INTEGER                       :: periodic_cell_i
-        INTEGER                       :: periodic_cell_j
-        INTEGER                       :: periodic_cell_k
-        INTEGER                       :: errorflag
-        INTEGER, DIMENSION(3*n_atoms) :: IPIV                  ! LAPACK related 
-        REAL*8,  DIMENSION(3*n_atoms) :: WORK                  ! LAPACK related
-        REAL*8,  DIMENSION(3,3)       :: TPP
-        REAL*8,  DIMENSION(3)         :: dxyz
-        REAL*8,  DIMENSION(3)         :: coord_curr
-        REAL*8                        :: r_ij
-        REAL*8                        :: r_pp
-        REAL*8                        :: Rvdw12
-        REAL*8                        :: beta
-        
-        !----------------------------------------------------------------------------------------------------------------------------------
-        ! initio values
-        !----------------------------------------------------------------------------------------------------------------------------------
-        relay_matrix=0.0d0
+    SUBROUTINE get_beta()
         !----------------------------------------------------------------------------------------------------------------------------------
         SELECT CASE (flag_xc)
             CASE (1) ! PBE
@@ -395,152 +358,153 @@ CONTAINS
                 CALL output_string(info_str)
         END SELECT
         !----------------------------------------------------------------------------------------------------------------------------------
-        
+    END SUBROUTINE get_beta
+    !--------------------------------------------------------------------------------------------------------------------------------------
+
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    SUBROUTINE get_screened_alpha(alpha_screened)
+    !--------------------------------------------------------------------------------------------------------------------------------------
+        REAL*8, DIMENSION(n_atoms)                    :: alpha_screened
+        REAL*8, DIMENSION(:,:),     ALLOCATABLE       :: screened_tensor
+        REAL*8, DIMENSION(:,:),     ALLOCATABLE       :: screened_tensor_loc
+        !----------------------------------------------------------------------------------------------------------------------------------
+        INTEGER                                       :: i_atom                ! iterator through all atoms
+        INTEGER                                       :: rlb                   ! local block row index
+        INTEGER                                       :: clb                   ! local block col index
+        INTEGER                                       :: rgb                   ! global block row index
+        INTEGER                                       :: cgb                   ! global block col index
+        !----------------------------------------------------------------------------------------------------------------------------------
+        INTEGER                                       :: info
+        INTEGER                                       :: DESC_A(9)
+        INTEGER                                       :: DESC_B(9)
+        !----------------------------------------------------------------------------------------------------------------------------------
+        ! initialize values
+        !----------------------------------------------------------------------------------------------------------------------------------
+        ALLOCATE(screened_tensor    (3*n_atoms, 3))
+        ALLOCATE(screened_tensor_loc(3*loc_row, 3))
+        !----------------------------------------------------------------------------------------------------------------------------------
+        alpha_screened      = 0.0D0
+        relay_matrix        = 0.0D0
+        screened_tensor     = 0.0D0
+        screened_tensor_loc = 0.0D0
+        !----------------------------------------------------------------------------------------------------------------------------------
         
         !----------------------------------------------------------------------------------------------------------------------------------
         ! compute relay matrix of cluster or unit cell
         !----------------------------------------------------------------------------------------------------------------------------------
-        DO i_row=1,n_atoms                                 ! loop through block index i
-            IF(iproc .EQ. task_list(i_row)) THEN      
-                DO i_col=i_row,n_atoms                     ! loop through block index j
-                    TPP=0.0d0
-                    IF(i_row .EQ. i_col) THEN              ! diagonal block
-                        DO i_index=1,3
-                            DO j_index=1,3
-                                IF(i_index .EQ. j_index) THEN
-                                    relay_matrix(3*i_row-3+i_index,3*i_col-3+j_index)=1.d0/alpha_omega(i_row)
-                                ELSE 
-                                    relay_matrix(3*i_row-3+i_index,3*i_col-3+j_index)=0.d0
-                                END IF   
-                            END DO
-                        END DO
-                    ELSE
-                        dxyz(:) = coords(:,i_col)-coords(:,i_row)
-                        r_ij    = DSQRT((dxyz(1))**2.0d0 +(dxyz(2))**2.0d0 + (dxyz(3))**2.0d0)
-                        r_pp    = DSQRT(R_p(i_row)**2 + R_p(i_col)**2)                         
-                        Rvdw12  = Rvdw_iso(i_row) +  Rvdw_iso(i_col)                           ! ??
-                        CALL SCS_TENSOR_MBD_rsSCS(dxyz,r_ij,r_pp,Rvdw12,beta,TPP)
-                        DO i_index=1,3,1
-                           DO j_index=1,3,1
-                            relay_matrix(3*i_row-3+i_index,3*i_col-3+j_index)=TPP(i_index,j_index)
-                            relay_matrix(3*i_col-3+j_index,3*i_row-3+i_index)=TPP(i_index,j_index)
-                           END DO
-                        END DO
-                    END IF
-                END DO
+        rlb = 0
+        !----------------------------------------------------------------------------------------------------------------------------------
+        DO rgb = (iprow+1), n_atoms, nprow
+            !------------------------------------------------------------------------------------------------------------------------------
+            rlb = rlb + 1
+            !------------------------------------------------------------------------------------------------------------------------------
+            clb = 0
+            !------------------------------------------------------------------------------------------------------------------------------
+            DO cgb = (ipcol+1), n_atoms, npcol
+                !--------------------------------------------------------------------------------------------------------------------------
+                clb = clb + 1
+                !--------------------------------------------------------------------------------------------------------------------------
+                IF (rgb .EQ. cgb) THEN
+                    relay_matrix((rlb-1)*3+1:(rlb*3), (clb-1)*3+1:(clb*3)) = scs_diag_block(rgb)
+                ELSE
+                    relay_matrix((rlb-1)*3+1:(rlb*3), (clb-1)*3+1:(clb*3)) = scs_offd_block(rgb, cgb)
+                END IF
+                !--------------------------------------------------------------------------------------------------------------------------
+            END DO
+            !------------------------------------------------------------------------------------------------------------------------------
+            IF ((ipcol+1) .EQ. 1) THEN
+                screened_tensor_loc((rlb-1)*3+1,1) = 1.0D0
+                screened_tensor_loc((rlb-1)*3+2,2) = 1.0D0
+                screened_tensor_loc((rlb-1)*3+3,3) = 1.0D0
             END IF
+            !------------------------------------------------------------------------------------------------------------------------------
         END DO
         !----------------------------------------------------------------------------------------------------------------------------------
         
-        CALL sync_tensors(relay_matrix,3*n_atoms)
-        
         !----------------------------------------------------------------------------------------------------------------------------------
-        IF (n_periodic .GT. 0) THEN
-            relay_matrix_periodic=0.0d0 
-            !------------------------------------------------------------------------------------------------------------------------------
-            IF(.NOT. mbd_scs_vacuum_axis(1)) THEN
-                periodic_cell_i = CEILING((mbd_scs_dip_cutoff/bohr) / SQRT(lattice_vector(1,1)**2 + lattice_vector(2,1)**2 + lattice_vector(3,1)**2))
-            ELSE
-                periodic_cell_i = 0
-            END IF 
-            !------------------------------------------------------------------------------------------------------------------------------
-            IF(.NOT. mbd_scs_vacuum_axis(2)) THEN
-                periodic_cell_j = CEILING((mbd_scs_dip_cutoff/bohr) / SQRT(lattice_vector(1,2)**2 + lattice_vector(2,2)**2 + lattice_vector(3,2)**2))
-            ELSE
-                periodic_cell_j = 0
-            END IF 
-            !------------------------------------------------------------------------------------------------------------------------------
-            IF(.NOT. mbd_scs_vacuum_axis(3)) THEN
-                periodic_cell_k = CEILING((mbd_scs_dip_cutoff/bohr) / SQRT(lattice_vector(1,3)**2 + lattice_vector(2,3)**2 + lattice_vector(3,3)**2))
-            ELSE
-                periodic_cell_k = 0
-            END IF 
-            !------------------------------------------------------------------------------------------------------------------------------
-            ! sum over images for long range interactions
-            !------------------------------------------------------------------------------------------------------------------------------
-            DO i_lattice = -periodic_cell_i, periodic_cell_i,1
-                DO j_lattice = -periodic_cell_j, periodic_cell_j,1
-                    DO k_lattice = -periodic_cell_k, periodic_cell_k,1
-                        IF((ABS(i_lattice) .NE. 0) .OR. (ABS(j_lattice) .NE. 0) .OR. (ABS(k_lattice) .NE. 0)) THEN !#1
-                            DO i_row = 1, n_atoms
-                                IF(iproc .EQ. task_list(i_row)) THEN
-                                    DO i_col = i_row, n_atoms
-                                        !-------------------------------------------------------------------------------------------------
-                                        coord_curr = 0.d0
-                                        dxyz = 0.d0
-                                        r_ij = 0.d0
-                                        TPP  = 0.d0
-                                        Rvdw12= 0.d0  
-                                        !-------------------------------------------------------------------------------------------------
-                                        ! find the coordinate of images
-                                        !-------------------------------------------------------------------------------------------------
-                                        coord_curr(:) = coords(:,i_col) + i_lattice*lattice_vector(:,1) + &
-                                                                          j_lattice*lattice_vector(:,2) + &
-                                                                          k_lattice*lattice_vector(:,3)
-                                        !-------------------------------------------------------------------------------------------------
-                                        dxyz(:) = coords(:,i_row) - coord_curr(:)
-                                        r_ij    = SQRT((dxyz(1))**2.0d0 + (dxyz(2))**2.0d0 + (dxyz(3))**2.0d0 )
-                                        r_pp    = SQRT(R_p(i_row)**2 + R_p(i_col)**2)
-                                        Rvdw12  = Rvdw_iso(i_row) + Rvdw_iso(i_col)
-                                        !-------------------------------------------------------------------------------------------------
-                                        IF(r_ij .LE. mbd_scs_dip_cutoff/bohr) THEN
-                                            CALL SCS_TENSOR_MBD_rsSCS(dxyz,r_ij,r_pp,Rvdw12,beta,TPP)
-                                            DO i_index=1,3
-                                                DO j_index=1,3
-                                                    relay_matrix_periodic(3*i_row-3+i_index,3*i_col-3+j_index) = &
-                                                    relay_matrix_periodic(3*i_row-3+i_index,3*i_col-3+j_index) + TPP(i_index,j_index)
-                                                    IF(i_col .NE. i_row) THEN
-                                                        relay_matrix_periodic(3*i_col-3+j_index,3*i_row-3+i_index) = &
-                                                        relay_matrix_periodic(3*i_col-3+j_index,3*i_row-3+i_index) + TPP(i_index,j_index)
-                                                    END IF
-                                                END DO
-                                            END DO
-                                        END IF
-                                        !-------------------------------------------------------------------------------------------------
-                                    END DO
-                                END IF
-                            END DO
-                        END IF  !#1
-                    END DO
-                END DO
-            END DO
-            !------------------------------------------------------------------------------------------------------------------------------
-            CALL sync_tensors(relay_matrix_periodic,3*n_atoms)
-            relay_matrix = relay_matrix + relay_matrix_periodic  
-            !------------------------------------------------------------------------------------------------------------------------------
-        END IF
-        
+        ! set up the description array for A and B
         !----------------------------------------------------------------------------------------------------------------------------------
-        CALL DGETRF(3*n_atoms, 3*n_atoms, relay_matrix, 3*n_atoms, IPIV, errorflag)            ! compute LU factorization of A
+        DESC_A(1) = 1
+        DESC_A(2) = ICONTXT
+        DESC_A(3) = 3*n_atoms
+        DESC_A(4) = 3*n_atoms
+        DESC_A(5) = 3
+        DESC_A(6) = 3
+        DESC_A(7) = 0
+        DESC_A(8) = 0
+        DESC_A(9) = 3*loc_row
         !----------------------------------------------------------------------------------------------------------------------------------
-        IF(errorflag .NE. 0) THEN
-            WRITE(info_str,'(A)')"Error** Matrix inversion failed in SCS module"
-            CALL output_string(info_str)
-        END IF
+        DESC_B(1) = 1
+        DESC_B(2) = ICONTXT
+        DESC_B(3) = 3*n_atoms
+        DESC_B(4) = 3*n_atoms
+        DESC_B(5) = 3
+        DESC_B(6) = 3
+        DESC_B(7) = 0
+        DESC_B(8) = 0
+        DESC_B(9) = 3*loc_row
         !----------------------------------------------------------------------------------------------------------------------------------
         
         !----------------------------------------------------------------------------------------------------------------------------------
-        CALL DGETRI(3*n_atoms, relay_matrix, 3*n_atoms, IPIV, WORK, 3*n_atoms, errorflag )     ! compute inverse of A (solve LU A^{-1} = I)
+        CALL PDPOTRF('L', 3*n_atoms, relay_matrix, 1, 1, DESC_A, info)                                ! compute Choleksy factorization of A
         !----------------------------------------------------------------------------------------------------------------------------------
-        IF(errorflag .NE. 0) THEN
-            WRITE(info_str,'(A)')"Error** Matrix inversion failed in SCS module"
-            CALL output_string(info_str)
-        END IF
+        
+        !----------------------------------------------------------------------------------------------------------------------------------
+        CALL PDPOTRS('L', 3*n_atoms, 3, relay_matrix, 1, 1, DESC_A, screened_tensor_loc, 1, 1, DESC_B, info)                   ! solve AX=B
+        !----------------------------------------------------------------------------------------------------------------------------------
+        
+        !----------------------------------------------------------------------------------------------------------------------------------
+        ! TEST
+        !----------------------------------------------------------------------------------------------------------------------------------
+        rlb = 0;
+        !----------------------------------------------------------------------------------------------------------------------------------
+        DO rgb = (iprow+1), n_atoms, nprow
+            !------------------------------------------------------------------------------------------------------------------------------
+            rlb = rlb + 1
+            !------------------------------------------------------------------------------------------------------------------------------
+            IF ((ipcol+1) .EQ. 1) THEN
+                screened_tensor((rgb-1)*3+1:rgb*3, :) = screened_tensor_loc((rlb-1)*3+1:rlb*3, :)
+            END IF
+            !------------------------------------------------------------------------------------------------------------------------------
+        END DO
+        !----------------------------------------------------------------------------------------------------------------------------------
+        CALL sync_tensors(screened_tensor,3*n_atoms,3)
+        !----------------------------------------------------------------------------------------------------------------------------------
+        
+        !----------------------------------------------------------------------------------------------------------------------------------
+        ! take the trace of the screened_tensor for each atom
+        !----------------------------------------------------------------------------------------------------------------------------------
+        DO i_atom = 1,n_atoms
+            !------------------------------------------------------------------------------------------------------------------------------
+            alpha_screened(i_atom) = alpha_screened(i_atom) + screened_tensor((i_atom-1)*3+1,1)
+            alpha_screened(i_atom) = alpha_screened(i_atom) + screened_tensor((i_atom-1)*3+2,2)
+            alpha_screened(i_atom) = alpha_screened(i_atom) + screened_tensor((i_atom-1)*3+3,3)
+            !------------------------------------------------------------------------------------------------------------------------------
+            mol_pol_tensor = mol_pol_tensor + screened_tensor((i_atom-1)*3+1:i_atom*3, 1:3)
+            !------------------------------------------------------------------------------------------------------------------------------
+        END DO
+        !----------------------------------------------------------------------------------------------------------------------------------
+        
+        !----------------------------------------------------------------------------------------------------------------------------------
+        DEALLOCATE(screened_tensor)
+        DEALLOCATE(screened_tensor_loc)
+        !----------------------------------------------------------------------------------------------------------------------------------
         RETURN
         !----------------------------------------------------------------------------------------------------------------------------------
-    END SUBROUTINE calculate_scs_matrix
+    END SUBROUTINE get_screened_alpha
     !--------------------------------------------------------------------------------------------------------------------------------------
 
     !--------------------------------------------------------------------------------------------------------------------------------------
-    SUBROUTINE SCS_TENSOR_MBD_rsSCS(dxyz, r_ij, r_pp, Rvdw12, beta, TPP)                                                    ! equation (14)
-    !--------------------------------------------------------------------------------------------------------------------------------------
-        REAL*8, INTENT(IN)                   :: r_ij
-        REAL*8, INTENT(IN)                   :: r_pp
+    FUNCTION dipole_tensor(dxyz, r12, sgm12, Rvdw12) RESULT(TPP)                                                            ! equation (14)
+        !----------------------------------------------------------------------------------------------------------------------------------
+        REAL*8, INTENT(IN)                   :: r12
+        REAL*8, INTENT(IN)                   :: sgm12
         REAL*8, INTENT(IN)                   :: Rvdw12
-        REAL*8, INTENT(IN)                   :: beta
         REAL*8, INTENT(IN),  DIMENSION(3)    :: dxyz
-        REAL*8, INTENT(OUT), DIMENSION(3,3)  :: TPP           ! dipole-dipole interaction tensor between two QHO Tp-p damped with Fermi damping 
-        REAL*8                               :: derf, erf
+        REAL*8                               :: derf
+        REAL*8                               :: erf
+        !----------------------------------------------------------------------------------------------------------------------------------
+        REAL*8,              DIMENSION(3,3)  :: TPP       ! dipole-dipole interaction tensor between two QHO Tp-p damped with Fermi damping 
         !----------------------------------------------------------------------------------------------------------------------------------
         ! local vars
         !----------------------------------------------------------------------------------------------------------------------------------
@@ -557,11 +521,12 @@ CONTAINS
         
         !----------------------------------------------------------------------------------------------------------------------------------
         TPP(:,:)    = 0.0d0
+        !----------------------------------------------------------------------------------------------------------------------------------
         d_param     = 6.0d0
-        fermi_param = r_ij/(beta*Rvdw12)
-        ratio       = r_ij/r_pp
-        zeta_l      = (derf(ratio) - (dsqrt(4.0d0/pi) * ratio * dexp(-(ratio**2.0d0)))) / (r_ij**5.0d0)
-        zeta_r      = (dsqrt(16.0d0/pi) * dexp(-(ratio**2.0d0))) / (r_pp * r_pp * r_pp * r_ij * r_ij)
+        fermi_param = r12/(beta*Rvdw12)
+        ratio       = r12/sgm12
+        zeta_l      = (derf(ratio) - (dsqrt(4.0d0/pi) * ratio * dexp(-(ratio**2.0d0)))) / (r12**5.0d0)
+        zeta_r      = (dsqrt(16.0d0/pi) * dexp(-(ratio**2.0d0))) / (sgm12 * sgm12 * sgm12 * r12 * r12)
         !----------------------------------------------------------------------------------------------------------------------------------
         
         !----------------------------------------------------------------------------------------------------------------------------------
@@ -577,8 +542,8 @@ CONTAINS
         !----------------------------------------------------------------------------------------------------------------------------------
         TPQ = r_tensor*3.0d0
         DO i=1,3
-           TPQ(i,i)=TPQ(i,i)-(r_ij*r_ij)
-        end do
+           TPQ(i,i)=TPQ(i,i)-(r12*r12)
+        END DO
         !----------------------------------------------------------------------------------------------------------------------------------
         
         !----------------------------------------------------------------------------------------------------------------------------------
@@ -586,12 +551,115 @@ CONTAINS
         !----------------------------------------------------------------------------------------------------------------------------------
         ! Fermi type damping  
         !----------------------------------------------------------------------------------------------------------------------------------
-        TPP = TPP*(1.0-(1.0/(1.0+exp(-d_param*(fermi_param-1.0)))))
+        TPP = TPP*(1.0-(1.0/(1.0+EXP(-d_param*(fermi_param-1.0)))))
         !----------------------------------------------------------------------------------------------------------------------------------
         RETURN
         !----------------------------------------------------------------------------------------------------------------------------------
-    END SUBROUTINE SCS_TENSOR_MBD_rsSCS
+    END FUNCTION dipole_tensor
     !--------------------------------------------------------------------------------------------------------------------------------------
+
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    FUNCTION scs_diag_block(rgb) RESULT(BSCS)                       ! diagonal block of the scs matrix
+        !----------------------------------------------------------------------------------------------------------------------------------
+        INTEGER, INTENT(IN)                  :: rgb                 ! global index for atom 'row'
+        !----------------------------------------------------------------------------------------------------------------------------------
+        INTEGER                              :: img_i               ! cell index along i
+        INTEGER                              :: img_j               ! cell index along j
+        INTEGER                              :: img_k               ! cell index along k
+        REAL*8                               :: r12                 ! distance between two atoms
+        REAL*8                               :: sgm12               ! sigma12
+        REAL*8                               :: Rvdw12              ! sum of two Rvdw for atom1 and atom2
+        REAL*8,              DIMENSION(3)    :: dxyz                ! displacement between two atoms
+        REAL*8,              DIMENSION(3)    :: coord_curr          ! coordinate of atom in image cell
+        !----------------------------------------------------------------------------------------------------------------------------------
+        REAL*8,              DIMENSION(3,3)  :: BSCS
+        !----------------------------------------------------------------------------------------------------------------------------------
+        
+        !----------------------------------------------------------------------------------------------------------------------------------
+        BSCS = 0.0D0
+        !----------------------------------------------------------------------------------------------------------------------------------
+        DO img_i = scsimage(1,1), scsimage(2,1)
+            DO img_j = scsimage(1,2), scsimage(2,2)
+                DO img_k = scsimage(1,3), scsimage(2,3)
+                    IF ((img_i .NE. 0) .OR. (img_j .NE. 0) .OR. (img_k .NE. 0)) THEN
+                        !-------------------------------------------------------------------------------------------------
+                        ! find the coordinate of images
+                        !-------------------------------------------------------------------------------------------------
+                        dxyz(:) = img_i*lattice_vector(:,1) + img_j*lattice_vector(:,2) + img_k*lattice_vector(:,3)
+                        !-------------------------------------------------------------------------------------------------
+                        r12     = SQRT(dxyz(1)*dxyz(1) + dxyz(2)*dxyz(2) + dxyz(3)*dxyz(3))
+                        sgm12   = sgm(rgb)
+                        Rvdw12  = 2.0D0*Rvdw_iso(rgb)
+                        !-------------------------------------------------------------------------------------------------
+                        IF(r12 .LE. mbd_scs_dip_cutoff/bohr) BSCS = BSCS + dipole_tensor(dxyz,r12,sgm12,Rvdw12)
+                        !-------------------------------------------------------------------------------------------------
+                    END IF
+                END DO
+            END DO
+        END DO
+        !----------------------------------------------------------------------------------------------------------------------------------
+        
+        !----------------------------------------------------------------------------------------------------------------------------------
+        BSCS(1,1) = BSCS(1,1) + 1.0D0/alpha_omega(rgb)
+        BSCS(2,2) = BSCS(2,2) + 1.0D0/alpha_omega(rgb)
+        BSCS(3,3) = BSCS(3,3) + 1.0D0/alpha_omega(rgb)
+        !----------------------------------------------------------------------------------------------------------------------------------
+    END FUNCTION scs_diag_block
+    !--------------------------------------------------------------------------------------------------------------------------------------
+
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    FUNCTION scs_offd_block(rgb, cgb) RESULT(BSCS)                  ! off diagonal block of the scs matrix
+        !----------------------------------------------------------------------------------------------------------------------------------
+        INTEGER, INTENT(IN)                  :: rgb                 ! global index for atom 'row'
+        INTEGER, INTENT(IN)                  :: cgb                 ! global index for atom 'cow'
+        !----------------------------------------------------------------------------------------------------------------------------------
+        INTEGER                              :: img_i               ! cell index along i
+        INTEGER                              :: img_j               ! cell index along j
+        INTEGER                              :: img_k               ! cell index along k
+        REAL*8                               :: r12                 ! distance between two atoms
+        REAL*8                               :: sgm12               ! sigma12
+        REAL*8                               :: Rvdw12              ! sum of two Rvdw for atom1 and atom2
+        REAL*8,              DIMENSION(3)    :: dxyz                ! displacement between two atoms
+        REAL*8,              DIMENSION(3)    :: coord_curr          ! coordinate of atom in image cell
+        !----------------------------------------------------------------------------------------------------------------------------------
+        REAL*8,              DIMENSION(3,3)  :: BSCS
+        !----------------------------------------------------------------------------------------------------------------------------------
+        
+        !----------------------------------------------------------------------------------------------------------------------------------
+        BSCS = 0.0D0
+        !----------------------------------------------------------------------------------------------------------------------------------
+        DO img_i = scsimage(1,1), scsimage(2,1)
+            DO img_j = scsimage(1,2), scsimage(2,2)
+                DO img_k = scsimage(1,3), scsimage(2,3)
+                    !-------------------------------------------------------------------------------------------------
+                    ! find the coordinate of images
+                    !-------------------------------------------------------------------------------------------------
+                    coord_curr(:) = coords(:,cgb) + img_i*lattice_vector(:,1) + img_j*lattice_vector(:,2) + img_k*lattice_vector(:,3)
+                    !-------------------------------------------------------------------------------------------------
+                    dxyz(:) = coords(:,rgb) - coord_curr(:)
+                    r12     = SQRT(dxyz(1)*dxyz(1) + dxyz(2)*dxyz(2) + dxyz(3)*dxyz(3))
+                    sgm12   = SQRT(sgm(rgb)*sgm(rgb) + sgm(cgb)*sgm(cgb))
+                    Rvdw12  = Rvdw_iso(rgb) + Rvdw_iso(cgb)
+                    !-------------------------------------------------------------------------------------------------
+                    IF(r12 .LE. mbd_scs_dip_cutoff/bohr) BSCS = BSCS + dipole_tensor(dxyz,r12,sgm12,Rvdw12)
+                    !-------------------------------------------------------------------------------------------------
+                END DO
+            END DO
+        END DO
+        !----------------------------------------------------------------------------------------------------------------------------------
+    END FUNCTION scs_offd_block
+    !--------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
 
 subroutine MBD_TENSOR_MBD_rsSCS(dxyz,r_ij,Rvdw12,beta,Tij)
       ! o Tij- Fermi type*Grad_i X Grad_j (1/r)
@@ -734,7 +802,7 @@ endsubroutine MBD_TENSOR_MBD_rsSCS
                 C6_free=0.d0
                 CALL get_vdw_param(atom_name(i_atom),C6_free,alpha_free,R_vdw_free)
                 !--------------------------------------------------------------------------------------------------------------------------
-                R_vdw_SL(i_atom)= R_vdw_free*((alpha_eff(i_atom)/alpha_free)**0.333333333333333333333333333d0)
+                R_vdw_SL(i_atom)= R_vdw_free*((alpha_eff(i_atom)/alpha_free)**otd)
                 omega_cfdm_SL(i_atom) = (4.d0/3.d0)*C6_eff(i_atom)/(alpha_eff(i_atom)**2.0)
                 coords_SL(:,i_atom)   = coords(:,i_atom)
                 alpha_eff_SL(i_atom) = alpha_eff(i_atom)
@@ -806,7 +874,7 @@ endsubroutine MBD_TENSOR_MBD_rsSCS
                             alpha_free=0.0d0  
                             CALL get_vdw_param(atom_name(i_atom),C6_free,alpha_free,R_vdw_free) !FIXME
                             
-                            R_vdw_SL(j_atom)=R_vdw_free*((alpha_eff(i_atom)/alpha_free)**0.333333333333333333333333333d0)
+                            R_vdw_SL(j_atom)=R_vdw_free*((alpha_eff(i_atom)/alpha_free)**otd)
                             alpha_eff_SL(j_atom) = alpha_eff(i_atom)
                             omega_cfdm_SL(j_atom) =(4.d0/3.d0)*C6_eff(i_atom)/(alpha_eff(i_atom)**2.0)
                         END DO 
@@ -858,7 +926,7 @@ endsubroutine MBD_TENSOR_MBD_rsSCS
         END DO
         !----------------------------------------------------------------------------------------------------------------------------------
         
-        CALL sync_tensors(cfdm_hamiltonian,3*n_atoms_SL)
+        CALL sync_tensors(cfdm_hamiltonian,3*n_atoms_SL,3*n_atoms_SL)
         
         !----------------------------------------------------------------------------------------------------------------------------------
         ! Adds dipole field due to image cells based spherical cutoff mbd_cfdm_dip_cutoff
@@ -925,7 +993,7 @@ endsubroutine MBD_TENSOR_MBD_rsSCS
                     END DO
                 END DO
             END DO
-            CALL sync_tensors(cfdm_hamiltonian_periodic,3*n_atoms_SL)    
+            CALL sync_tensors(cfdm_hamiltonian_periodic,3*n_atoms_SL,3*n_atoms_SL)
             cfdm_hamiltonian = cfdm_hamiltonian + cfdm_hamiltonian_periodic
         END IF
         
@@ -977,23 +1045,34 @@ endsubroutine MBD_TENSOR_MBD_rsSCS
     !--------------------------------------------------------------------------------------------------------------------------------------
 
     !--------------------------------------------------------------------------------------------------------------------------------------
-    SUBROUTINE get_alpha_omega_and_Rp(HF,C6_free,alpha_free,w,a_w,Rpw)
-        implicit none
-        real*8,intent(in)::HF,C6_free,alpha_free,w
-        real*8,intent(out)::a_w,Rpw
-        real*8::eff_freq,w_eff_freq_ratio
+    SUBROUTINE get_alpha_omega_and_sgm(HF,C6_free,alpha_free,w,a_w,sgm_w)
+    !--------------------------------------------------------------------------------------------------------------------------------------
+        IMPLICIT NONE
+        !----------------------------------------------------------------------------------------------------------------------------------
+        REAL*8, INTENT(IN)   ::   HF
+        REAL*8, INTENT(IN)   ::   C6_free
+        REAL*8, INTENT(IN)   ::   alpha_free
+        REAL*8, INTENT(IN)   ::   w
+        REAL*8, INTENT(OUT)  ::   a_w
+        REAL*8, INTENT(OUT)  ::   sgm_w
+        REAL*8               ::   w_p
+        REAL*8               ::   w_eff_freq_ratio
+        !----------------------------------------------------------------------------------------------------------------------------------
         ! alpha(iomega)
-        eff_freq=0.0d0
-        w_eff_freq_ratio=0.0d0
-        eff_freq= ((4.d0/3.d0)*C6_free/(alpha_free**2.0))**2
-        w_eff_freq_ratio=(w*w)/eff_freq
-        a_w=(HF*alpha_free)/(1.0+w_eff_freq_ratio)
+        !----------------------------------------------------------------------------------------------------------------------------------
+        w_p = (4.d0/3.d0)*C6_free/(alpha_free*alpha_free)        ! characteristic frequency (omega_p)
+        a_w = (HF*alpha_free)/(1.0+(w*w)/(w_p*w_p))              ! alpha(iw)
+        !----------------------------------------------------------------------------------------------------------------------------------
      
-        !Rp(iomega) ! Rp_eff definition from   A. Mayer, Phys. Rev. B, 75,045407(2007)
-        Rpw= ((a_w/3.d0)*dsqrt(2.0d0/pi))**0.333333333333333333333333333d0
+        !----------------------------------------------------------------------------------------------------------------------------------
+        ! sgm(iomega)
+        !----------------------------------------------------------------------------------------------------------------------------------
+        sgm_w = ((a_w/3.d0)*dsqrt(2.0D0/pi))**otd
+        !----------------------------------------------------------------------------------------------------------------------------------
         
         RETURN
-    END SUBROUTINE get_alpha_omega_and_Rp
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    END SUBROUTINE get_alpha_omega_and_sgm
     !--------------------------------------------------------------------------------------------------------------------------------------
 
     !--------------------------------------------------------------------------------------------------------------------------------------
@@ -1101,6 +1180,39 @@ endsubroutine MBD_TENSOR_MBD_rsSCS
         casimir_omega(20) = 25.451700; casimir_omega_weight(20) = 50.955800
         RETURN
     END SUBROUTINE gauss_legendre_grid
+    !--------------------------------------------------------------------------------------------------------------------------------------
+
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    SUBROUTINE get_scs_image()
+        !----------------------------------------------------------------------------------------------------------------------------------
+        IF(.NOT. mbd_scs_vacuum_axis(1)) THEN
+            scsimage(1,1) = -CEILING((mbd_scs_dip_cutoff/bohr) / SQRT(lattice_vector(1,1)**2 + lattice_vector(2,1)**2 + lattice_vector(3,1)**2))
+            scsimage(2,1) =  CEILING((mbd_scs_dip_cutoff/bohr) / SQRT(lattice_vector(1,1)**2 + lattice_vector(2,1)**2 + lattice_vector(3,1)**2))
+        ELSE
+            scsimage(1,1) = 0
+            scsimage(2,1) = 0
+        END IF 
+        !----------------------------------------------------------------------------------------------------------------------------------
+        IF(.NOT. mbd_scs_vacuum_axis(2)) THEN
+            scsimage(1,2) = -CEILING((mbd_scs_dip_cutoff/bohr) / SQRT(lattice_vector(1,2)**2 + lattice_vector(2,2)**2 + lattice_vector(3,2)**2))
+            scsimage(2,2) =  CEILING((mbd_scs_dip_cutoff/bohr) / SQRT(lattice_vector(1,2)**2 + lattice_vector(2,2)**2 + lattice_vector(3,2)**2))
+        ELSE
+            scsimage(1,2) = 0
+            scsimage(2,2) = 0
+        END IF 
+        !----------------------------------------------------------------------------------------------------------------------------------
+        IF(.NOT. mbd_scs_vacuum_axis(3)) THEN
+            scsimage(1,3) = -CEILING((mbd_scs_dip_cutoff/bohr) / SQRT(lattice_vector(1,3)**2 + lattice_vector(2,3)**2 + lattice_vector(3,3)**2))
+            scsimage(2,3) =  CEILING((mbd_scs_dip_cutoff/bohr) / SQRT(lattice_vector(1,3)**2 + lattice_vector(2,3)**2 + lattice_vector(3,3)**2))
+        ELSE
+            scsimage(1,3) = 0
+            scsimage(2,3) = 0
+        END IF 
+        !----------------------------------------------------------------------------------------------------------------------------------
+        IF (n_periodic .EQ. 0) scsimage = 0
+        !----------------------------------------------------------------------------------------------------------------------------------
+        RETURN
+    END SUBROUTINE get_scs_image
     !--------------------------------------------------------------------------------------------------------------------------------------
 
     !--------------------------------------------------------------------------------------------------------------------------------------
