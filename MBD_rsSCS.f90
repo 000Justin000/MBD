@@ -202,9 +202,7 @@ PROGRAM MBD_rsSCS
     ! major calculation
     !---------------------------------------------------------------------
     CALL allocate_task()
-    WRITE(*,*) "initializing blacs"
     CALL init_blacs()
-    WRITE(*,*) "blacs initialized"
     CALL MBD_at_rsSCS(ene_mbd_rsSCS)
     !---------------------------------------------------------------------
 

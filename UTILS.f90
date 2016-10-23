@@ -10,6 +10,7 @@ MODULE  UTILS
     !--------------------------------------------------------------------------------------------------------------------------------------
     REAL*8                                      ::   bohr
     REAL*8                                      ::   pi
+    REAL*8                                      ::   eps
     !--------------------------------------------------------------------------------------------------------------------------------------
     ! input setting
     !--------------------------------------------------------------------------------------------------------------------------------------
@@ -28,13 +29,14 @@ MODULE  UTILS
     REAL*8,                   DIMENSION(3,3)    ::   lattice_vector
     !--------------------------------------------------------------------------------------------------------------------------------------
     INTEGER,     ALLOCATABLE, DIMENSION(:)      ::   task_list
-    REAL*8,      ALLOCATABLE, DIMENSION(:,:)    ::   coupled_atom_pol
+    REAL*8,      ALLOCATABLE, DIMENSION(:)      ::   alpha_eff                    ! screened polarizability @ 0 Hz
+    REAL*8,      ALLOCATABLE, DIMENSION(:,:)    ::   coupled_atom_pol             ! screened polarizability @ a certain frequency
     REAL*8,      ALLOCATABLE, DIMENSION(:,:)    ::   relay_matrix                 ! 3N x 3N (imaginary) frequency dependent matrix
     REAL*8,      ALLOCATABLE, DIMENSION(:,:)    ::   relay_matrix_periodic
+    REAL*8,      ALLOCATABLE, DIMENSION(:,:)    ::   screened_alpha
     REAL*8,      ALLOCATABLE, DIMENSION(:)      ::   alpha_omega
     REAL*8,      ALLOCATABLE, DIMENSION(:)      ::   R_p                          ! effective dipole spread of QHO, [PRB,75,045407(2007)]
     REAL*8,      ALLOCATABLE, DIMENSION(:)      ::   Rvdw_iso                             
-    REAL*8,      ALLOCATABLE, DIMENSION(:)      ::   alpha_eff
     REAL*8,      ALLOCATABLE, DIMENSION(:)      ::   C6_eff
     REAL*8,                   DIMENSION(3,3)    ::   mol_pol_tensor
     REAL*8,                   DIMENSION(0:20)   ::   casimir_omega
@@ -51,8 +53,10 @@ MODULE  UTILS
     !--------------------------------------------------------------------------------------------------------------------------------------
     INTEGER                                     ::   nprow                        ! processes grid along row
     INTEGER                                     ::   npcol                        ! processes grid along col
-    INTEGER                                     ::   ipcol                        ! process id along row
     INTEGER                                     ::   iprow                        ! process id along col
+    INTEGER                                     ::   ipcol                        ! process id along row
+    INTEGER                                     ::   loc_row                      ! local row index for blocks
+    INTEGER                                     ::   loc_col                      ! local col index for blocks
     INTEGER                                     ::   icontxt                      ! blacs related
     INTEGER                                     ::   desc_A(9)                    ! description of A matrix
     INTEGER                                     ::   desc_B(9)                    ! description of B matrix
@@ -70,6 +74,7 @@ CONTAINS
         n_periodic             = 0  
         bohr                   = 0.52917721D0
         pi                     = 3.14159265358979323846d0
+        eps                    = 10e-6
         mbd_scs_vacuum_axis(1) = .FALSE. 
         mbd_scs_vacuum_axis(2) = .FALSE. 
         mbd_scs_vacuum_axis(3) = .FALSE. 
@@ -116,7 +121,6 @@ CONTAINS
         CALL BLACS_GET(0, 0, icontxt)
         CALL BLACS_GRIDINIT(icontxt, "Row", nprow, npcol)
         CALL BLACS_GRIDINFO(icontxt, nprow, npcol, iprow, ipcol)
-        WRITE(*,"(A,I1,A,I1,A,I1,A,I1,A,I1)") "nproc=",nproc,"   iproc=",iproc,"   iprow=",iprow,"   ipcol=",ipcol,"   icontxt=",icontxt
     END SUBROUTINE init_blacs
     !--------------------------------------------------------------------------------------------------------------------------------------
 
@@ -164,17 +168,24 @@ CONTAINS
         !----------------------------------------------------------------------------------------------------------------------------------
         
         !----------------------------------------------------------------------------------------------------------------------------------
+        loc_row = INT(CEILING(DBLE(n_atoms)/DBLE(nprow) - eps) + eps)
+        loc_col = INT(CEILING(DBLE(n_atoms)/DBLE(npcol) - eps) + eps)
+        !----------------------------------------------------------------------------------------------------------------------------------
+        
+        !----------------------------------------------------------------------------------------------------------------------------------
         ! Allocation
         !----------------------------------------------------------------------------------------------------------------------------------
         ! JJ: as distributed computing, you can not allocate the same matrix everywhere 3N*3N
         !----------------------------------------------------------------------------------------------------------------------------------
         IF(.NOT. ALLOCATED(relay_matrix))              ALLOCATE(relay_matrix(3*n_atoms,3*n_atoms))
+        IF(.NOT. ALLOCATED(screened_alpha))            ALLOCATE(screened_alpha(n_atoms,3))
         IF(.NOT. ALLOCATED(R_p))                       ALLOCATE(R_p(n_atoms))
         IF(.NOT. ALLOCATED(Rvdw_iso))                  ALLOCATE(Rvdw_iso(n_atoms))
         IF(.NOT. ALLOCATED(alpha_omega))               ALLOCATE(alpha_omega(n_atoms))
         IF(.NOT. ALLOCATED(coupled_atom_pol))          ALLOCATE(coupled_atom_pol(20,n_atoms))
         IF(.NOT. ALLOCATED(alpha_eff))                 ALLOCATE(alpha_eff(n_atoms))
         IF(.NOT. ALLOCATED(C6_eff))                    ALLOCATE(C6_eff(n_atoms))
+        !----------------------------------------------------------------------------------------------------------------------------------
         IF(n_periodic .GT. 0) THEN
             IF(.NOT. ALLOCATED(relay_matrix_periodic)) ALLOCATE(relay_matrix_periodic(3*n_atoms,3*n_atoms))
         END IF
@@ -183,12 +194,13 @@ CONTAINS
         !----------------------------------------------------------------------------------------------------------------------------------
         ! Initialization
         !----------------------------------------------------------------------------------------------------------------------------------
-        C6_eff               = 0.0d0 
-        alpha_eff            = 0.0d0
-        mol_c6_coeff         = 0.0d0
-        coupled_atom_pol     = 0.0d0
-        casimir_omega        = 0.0d0
-        casimir_omega_weight = 0.0d0 
+        C6_eff               = 0.0D0 
+        alpha_eff            = 0.0D0
+        mol_c6_coeff         = 0.0D0
+        screened_alpha       = 0.0D0
+        coupled_atom_pol     = 0.0D0
+        casimir_omega        = 0.0D0
+        casimir_omega_weight = 0.0D0 
         CALL gauss_legendre_grid()
         !----------------------------------------------------------------------------------------------------------------------------------
         
