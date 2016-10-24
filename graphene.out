@@ -1,0 +1,203 @@
+  Using        4 parallel tasks.
+    Radius used to construct the supercell in periodic MBD calculations  20.00000 Angstrom
+   |----------------------------------Input Geometry----------------------------------
+   Number of atoms   60
+ 
+    C          0.000000         2.839965         0.000000         0.848762
+    Radius used to integrate dipole field in periodic MBD calculations 100.00000 Angstrom
+    Radius used to integrate dipole field in periodic SCS calculations 120.00000 Angstrom
+     Found mbd_scs_vacuum_axis keyword in setting file
+     This keyword specifies direction of vacuum region in case of low-dimensional systems
+    Default: No vacuum mbd_scs_vacuum_axis .false. .false. .false.
+    For example in the case of periodic slab along xy directions the keyword
+    mbd_scs_vacuum_axis .false. .false. .true. is needed to specify z as
+    vacuum direction in MBD/SCS calculation.
+   |---------------------------------------------------------------------------
+    C          1.229750         2.129968         0.000000         0.848787
+    C          1.229750         0.709975         0.000000         0.848745
+    C          0.000000         4.259979         0.000000         0.848880
+    C          0.000000         7.099965         0.000000         0.848980
+    C          1.229750         6.389968         0.000000         0.848973
+    C          1.229750         4.969975         0.000000         0.848882
+    C          0.000000         8.519979         0.000000         0.849005
+    C          0.000000        11.359965         0.000000         0.848815
+    C          1.229750        10.649968         0.000000         0.848892
+    C          1.229750         9.229975         0.000000         0.848925
+    C          0.000000        12.779979         0.000000         0.848774
+    C          2.459500         2.839965         0.000000         0.848819
+    C          3.689250         2.129968         0.000000         0.848917
+    C          3.689250         0.709975         0.000000         0.848887
+    C          2.459500         4.259979         0.000000         0.848880
+    C          2.459500         7.099965         0.000000         0.848885
+    C          3.689250         6.389968         0.000000         0.848844
+    C          3.689250         4.969975         0.000000         0.848836
+    C          2.459500         8.519979         0.000000         0.848916
+    C          2.459500        11.359965         0.000000         0.848839
+    C          3.689250        10.649968         0.000000         0.848881
+    C          3.689250         9.229975         0.000000         0.848818
+    C          2.459500        12.779979         0.000000         0.848848
+    C          4.919000         2.839965         0.000000         0.848924
+    C          6.148750         2.129968         0.000000         0.849004
+    C          6.148750         0.709975         0.000000         0.848982
+    C          4.919000         4.259979         0.000000         0.848891
+    C          4.919000         7.099965         0.000000         0.848741
+    C          6.148750         6.389968         0.000000         0.848770
+    C          6.148750         4.969975         0.000000         0.848813
+    C          4.919000         8.519979         0.000000         0.848784
+    C          4.919000        11.359965         0.000000         0.848885
+    C          6.148750        10.649968         0.000000         0.848882
+    C          6.148750         9.229975         0.000000         0.848760
+    C          4.919000        12.779979         0.000000         0.848976
+    C          7.378500         2.839965         0.000000         0.848924
+    C          8.608250         2.129968         0.000000         0.848917
+    C          8.608250         0.709975         0.000000         0.848887
+    C          7.378500         4.259979         0.000000         0.848891
+    C          7.378500         7.099965         0.000000         0.848741
+    C          8.608250         6.389968         0.000000         0.848844
+    C          8.608250         4.969975         0.000000         0.848836
+    C          7.378500         8.519979         0.000000         0.848784
+    C          7.378500        11.359965         0.000000         0.848885
+    C          8.608250        10.649968         0.000000         0.848881
+    C          8.608250         9.229975         0.000000         0.848818
+    C          7.378500        12.779979         0.000000         0.848976
+    C          9.838000         2.839965         0.000000         0.848819
+    C         11.067750         2.129968         0.000000         0.848787
+    C         11.067750         0.709975         0.000000         0.848745
+    C          9.838000         4.259979         0.000000         0.848880
+    C          9.838000         7.099965         0.000000         0.848885
+    C         11.067750         6.389968         0.000000         0.848973
+    C         11.067750         4.969975         0.000000         0.848882
+    C          9.838000         8.519979         0.000000         0.848916
+    C          9.838000        11.359965         0.000000         0.848839
+    C         11.067750        10.649968         0.000000         0.848892
+    C         11.067750         9.229975         0.000000         0.848925
+    C          9.838000        12.779979         0.000000         0.848848
+   |----------------------------------------------------------------------------------
+   |--------------------------------MBD@rSCS Settings---------------------------
+    Exchange-Correlation functional:   1  (PBE)
+    xc type not specified in setting file, using default for 
+    Exchange-Correlation functional:   1  (PBE)
+    Radius used to construct the supercell in periodic MBD calculations  20.00000 Angstrom
+    Radius used to integrate dipole field in periodic MBD calculations 100.00000 Angstrom
+    Radius used to integrate dipole field in periodic SCS calculations 120.00000 Angstrom
+     Found mbd_scs_vacuum_axis keyword in setting file
+     This keyword specifies direction of vacuum region in case of low-dimensional systems
+    Default: No vacuum mbd_scs_vacuum_axis .false. .false. .false.
+    For example in the case of periodic slab along xy directions the keyword
+    mbd_scs_vacuum_axis .false. .false. .true. is needed to specify z as
+    vacuum direction in MBD/SCS calculation.
+   |---------------------------------------------------------------------------
+   | Many-Body Dispersion (MBD@rsSCS) energy
+   | Dynamic polarizability of unit cell alpha(iw) (bohr^3)
+   | ---------------------------------------------------------------------------
+   |  omega(Ha)   alpha_iso      alpha_xx       alpha_yy       alpha_zz
+    Radius used to construct the supercell in periodic MBD calculations  20.00000 Angstrom
+    Radius used to integrate dipole field in periodic MBD calculations 100.00000 Angstrom
+    Radius used to integrate dipole field in periodic SCS calculations 120.00000 Angstrom
+     Found mbd_scs_vacuum_axis keyword in setting file
+     This keyword specifies direction of vacuum region in case of low-dimensional systems
+    Default: No vacuum mbd_scs_vacuum_axis .false. .false. .false.
+    For example in the case of periodic slab along xy directions the keyword
+    mbd_scs_vacuum_axis .false. .false. .true. is needed to specify z as
+    vacuum direction in MBD/SCS calculation.
+   |---------------------------------------------------------------------------
+    Radius used to construct the supercell in periodic MBD calculations  20.00000 Angstrom
+    Radius used to integrate dipole field in periodic MBD calculations 100.00000 Angstrom
+    Radius used to integrate dipole field in periodic SCS calculations 120.00000 Angstrom
+     Found mbd_scs_vacuum_axis keyword in setting file
+     This keyword specifies direction of vacuum region in case of low-dimensional systems
+    Default: No vacuum mbd_scs_vacuum_axis .false. .false. .false.
+    For example in the case of periodic slab along xy directions the keyword
+    mbd_scs_vacuum_axis .false. .false. .true. is needed to specify z as
+    vacuum direction in MBD/SCS calculation.
+   |---------------------------------------------------------------------------
+   |   0.000000   0.545135E+03   0.228931E+03   0.703234E+03   0.703239E+03
+   |   0.039290   0.542425E+03   0.227893E+03   0.699689E+03   0.699694E+03
+   |   0.118358   0.521320E+03   0.219962E+03   0.671997E+03   0.672002E+03
+   |   0.198912   0.481959E+03   0.205822E+03   0.620025E+03   0.620030E+03
+   |   0.282029   0.429199E+03   0.187934E+03   0.549830E+03   0.549835E+03
+   |   0.368919   0.368794E+03   0.168466E+03   0.468955E+03   0.468960E+03
+   |   0.461006   0.306470E+03   0.148861E+03   0.385272E+03   0.385276E+03
+   |   0.560027   0.247232E+03   0.129892E+03   0.305900E+03   0.305904E+03
+   |   0.668179   0.194679E+03   0.111906E+03   0.236064E+03   0.236067E+03
+   |   0.788336   0.150561E+03   0.950449E+02   0.178318E+03   0.178320E+03
+   |   0.924390   0.114932E+03   0.793834E+02   0.132706E+03   0.132707E+03
+   |   1.081790   0.867885E+02   0.649939E+02   0.976856E+02   0.976862E+02
+   |   1.268490   0.647434E+02   0.519538E+02   0.711381E+02   0.711384E+02
+   |   1.496610   0.474799E+02   0.403341E+02   0.510527E+02   0.510529E+02
+   |   1.785630   0.339379E+02   0.301841E+02   0.358148E+02   0.358149E+02
+   |   2.169170   0.233357E+02   0.215237E+02   0.242416E+02   0.242417E+02
+   |   2.710620   0.151243E+02   0.143512E+02   0.155108E+02   0.155108E+02
+   |   3.545730   0.892289E+01   0.865075E+01   0.905896E+01   0.905897E+01
+   |   5.027340   0.446976E+01   0.440092E+01   0.450418E+01   0.450418E+01
+   |   8.448960   0.158988E+01   0.158113E+01   0.159426E+01   0.159426E+01
+   |  25.451700   0.175605E+00   0.175498E+00   0.175659E+00   0.175659E+00
+   | ---------------------------------------------------------------------------
+   | Unit cell C6 coefficient    :       114120.83609933    hartree bohr^6
+   | ---------------------------------------------------------------------------
+   | Partitioned C6 (hartree bohr^6) | alpha (bohr^3)  of atom in unit cell
+   | ---------------------------------------------------------------------------
+   | ATOM    1  C    31.693266          9.084657
+   | ATOM    2  C    31.694940          9.084944
+   | ATOM    3  C    31.691030          9.084295
+   | ATOM    4  C    31.701379          9.085797
+   | ATOM    5  C    31.707822          9.086507
+   | ATOM    6  C    31.707587          9.086566
+   | ATOM    7  C    31.701085          9.085623
+   | ATOM    8  C    31.710932          9.087077
+   | ATOM    9  C    31.695691          9.084902
+   | ATOM   10  C    31.702946          9.086016
+   | ATOM   11  C    31.703071          9.085831
+   | ATOM   12  C    31.695037          9.085023
+   | ATOM   13  C    31.696686          9.085067
+   | ATOM   14  C    31.704116          9.086136
+   | ATOM   15  C    31.700839          9.085557
+   | ATOM   16  C    31.701740          9.085858
+   | ATOM   17  C    31.701148          9.085640
+   | ATOM   18  C    31.699152          9.085502
+   | ATOM   19  C    31.697195          9.085085
+   | ATOM   20  C    31.704493          9.086226
+   | ATOM   21  C    31.697816          9.085205
+   | ATOM   22  C    31.701376          9.085770
+   | ATOM   23  C    31.696182          9.084961
+   | ATOM   24  C    31.699852          9.085632
+   | ATOM   25  C    31.703392          9.085907
+   | ATOM   26  C    31.710399          9.086966
+   | ATOM   27  C    31.707550          9.086435
+   | ATOM   28  C    31.703336          9.086109
+   | ATOM   29  C    31.691171          9.084351
+   | ATOM   30  C    31.694375          9.084902
+   | ATOM   31  C    31.695223          9.084811
+   | ATOM   32  C    31.695147          9.085008
+   | ATOM   33  C    31.701708          9.085742
+   | ATOM   34  C    31.701138          9.085731
+   | ATOM   35  C    31.692711          9.084548
+   | ATOM   36  C    31.708203          9.086683
+   | ATOM   37  C    31.703392          9.085907
+   | ATOM   38  C    31.704116          9.086136
+   | ATOM   39  C    31.700839          9.085557
+   | ATOM   40  C    31.703336          9.086109
+   | ATOM   41  C    31.691171          9.084351
+   | ATOM   42  C    31.699152          9.085502
+   | ATOM   43  C    31.697195          9.085085
+   | ATOM   44  C    31.695147          9.085008
+   | ATOM   45  C    31.701708          9.085742
+   | ATOM   46  C    31.701376          9.085770
+   | ATOM   47  C    31.696182          9.084961
+   | ATOM   48  C    31.708203          9.086683
+   | ATOM   49  C    31.696686          9.085067
+   | ATOM   50  C    31.694940          9.084944
+   | ATOM   51  C    31.691030          9.084295
+   | ATOM   52  C    31.701740          9.085858
+   | ATOM   53  C    31.701148          9.085640
+   | ATOM   54  C    31.707587          9.086566
+   | ATOM   55  C    31.701085          9.085623
+   | ATOM   56  C    31.704493          9.086226
+   | ATOM   57  C    31.697816          9.085205
+   | ATOM   58  C    31.702946          9.086016
+   | ATOM   59  C    31.703071          9.085831
+   | ATOM   60  C    31.699852          9.085632
+   | ---------------------------------------------------------------------------
+   | Creating super cell of dimension  2 X   2 X   2 in MBD calculation
+   | containing   480  atom
+   | MBD@rsSCS energy   :        -0.186408305 Ha             -5.072356469 eV
