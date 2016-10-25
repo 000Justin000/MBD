@@ -708,7 +708,8 @@ CONTAINS
 !   END FUNCTION lr_bare_dipole_tensor
 !   !--------------------------------------------------------------------------------------------------------------------------------------
 
-    function lr_bare_dipole_tensor(dxyz,r_ij,Rvdw12) result(Tij)
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    FUNCTION lr_bare_dipole_tensor(dxyz,r_ij,Rvdw12) RESULT(TBDLR)
        ! o Tij- Fermi type*Grad_i X Grad_j (1/r)
        ! tensor derived from bare coulomb potential damped with
        ! Fermi type damping
@@ -716,31 +717,33 @@ CONTAINS
        real*8,dimension(3),intent(in) :: dxyz
        real*8,intent(in) :: r_ij
        real*8,intent(in) :: Rvdw12
-       real*8,dimension(3,3) :: Tij
+       real*8,dimension(3,3) :: TBDLR
        ! This needs declarding for the PGI Architecture
-       real*8 :: erf
-       real*8 :: d_param,fermi_param
+       real*8 :: d_param
+       real*8 :: fermi_param
        ! local vars
-       integer :: i_index, j_index
+       integer :: i
+       integer :: j
  
        d_param = 6.0
        fermi_param =r_ij/(beta*Rvdw12)
  
-              do i_index=1,3,1
-                do j_index=1,3,1
-                 Tij(i_index,j_index)=3.d0*dxyz(i_index)*dxyz(j_index)
+              do i=1,3
+                do j=1,3
+                 TBDLR(i,j)=3.d0*dxyz(i)*dxyz(j)
                 enddo
               enddo
  
-              do i_index=1,3,1
-                Tij(i_index,i_index) = Tij(i_index,i_index) - r_ij**2
+              do i=1,3
+                TBDLR(i,i) = TBDLR(i,i) - r_ij**2
               enddo
-              Tij=Tij/r_ij**5
-              Tij=-1.d0*Tij
+              TBDLR=TBDLR/r_ij**5
+              TBDLR=-1.d0*TBDLR
  
-              Tij=Tij*(1.0/(1.0+exp(-d_param*(fermi_param-1.0))))
+              TBDLR=TBDLR*(1.0/(1.0+exp(-d_param*(fermi_param-1.0))))
        return
- endfunction lr_bare_dipole_tensor
+    END FUNCTION lr_bare_dipole_tensor
+    !--------------------------------------------------------------------------------------------------------------------------------------
 
 
 
