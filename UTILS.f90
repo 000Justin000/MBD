@@ -709,39 +709,47 @@ CONTAINS
 !   !--------------------------------------------------------------------------------------------------------------------------------------
 
     !--------------------------------------------------------------------------------------------------------------------------------------
-    FUNCTION lr_bare_dipole_tensor(dxyz,r_ij,Rvdw12) RESULT(TBDLR)
-       ! o Tij- Fermi type*Grad_i X Grad_j (1/r)
-       ! tensor derived from bare coulomb potential damped with
-       ! Fermi type damping
- 
-       real*8,dimension(3),intent(in) :: dxyz
-       real*8,intent(in) :: r_ij
-       real*8,intent(in) :: Rvdw12
-       real*8,dimension(3,3) :: TBDLR
-       ! This needs declarding for the PGI Architecture
-       real*8 :: d_param
-       real*8 :: fermi_param
-       ! local vars
-       integer :: i
-       integer :: j
- 
-       d_param = 6.0
-       fermi_param =r_ij/(beta*Rvdw12)
- 
-              do i=1,3
-                do j=1,3
-                 TBDLR(i,j)=3.d0*dxyz(i)*dxyz(j)
-                enddo
-              enddo
- 
-              do i=1,3
-                TBDLR(i,i) = TBDLR(i,i) - r_ij**2
-              enddo
-              TBDLR=TBDLR/r_ij**5
-              TBDLR=-1.d0*TBDLR
- 
-              TBDLR=TBDLR*(1.0/(1.0+exp(-d_param*(fermi_param-1.0))))
-       return
+    FUNCTION lr_bare_dipole_tensor(dxyz,r12,Rvdw12) RESULT(TBDLR)
+        !----------------------------------------------------------------------------------------------------------------------------------
+        ! T_{LR} = \frac{1}{1+\exp{-a*(r_{ij}/S_{vdW}-1)}} * T_{BD}
+        !----------------------------------------------------------------------------------------------------------------------------------
+        ! T_{LR}: long range dipole-dipole interaction tensor
+        ! T_{BD}: bare dipole-dipole interaction tensor
+        !----------------------------------------------------------------------------------------------------------------------------------
+        REAL*8, DIMENSION(3),  INTENT(IN)  :: dxyz
+        REAL*8,                INTENT(IN)  :: r12
+        REAL*8,                INTENT(IN)  :: Rvdw12
+        !----------------------------------------------------------------------------------------------------------------------------------
+        REAL*8, DIMENSION(3,3)             :: TBDLR
+        !----------------------------------------------------------------------------------------------------------------------------------
+        ! local vars
+        !----------------------------------------------------------------------------------------------------------------------------------
+        REAL*8, DIMENSION(3,3)             :: r_tensor
+        REAL*8                             :: d_param
+        REAL*8                             :: fermi_param
+        INTEGER                            :: i
+        INTEGER                            :: j
+        !----------------------------------------------------------------------------------------------------------------------------------
+        
+        !----------------------------------------------------------------------------------------------------------------------------------
+        d_param = 6.0D0
+        fermi_param =r12/(beta*Rvdw12)
+        !----------------------------------------------------------------------------------------------------------------------------------
+         
+        DO i=1,3
+            DO j=1,3
+                TBDLR(i,j)=3.0D0*dxyz(i)*dxyz(j)
+            END DO
+        END DO
+        
+        DO i=1,3
+            TBDLR(i,i) = TBDLR(i,i) - r12**2.0D0
+        END DO
+        TBDLR=TBDLR/r12**5.0D0
+        TBDLR=-1.0D0*TBDLR
+     
+        TBDLR=TBDLR*(1.0D0/(1.0D0+EXP(-d_param*(fermi_param-1.0D0))))
+        RETURN
     END FUNCTION lr_bare_dipole_tensor
     !--------------------------------------------------------------------------------------------------------------------------------------
 
