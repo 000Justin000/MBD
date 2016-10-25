@@ -407,7 +407,7 @@ CONTAINS
                 IF (rgb .EQ. cgb) THEN
                     relay_matrix((rlb-1)*3+1:(rlb*3), (clb-1)*3+1:(clb*3)) = scs_diag_block(rgb)
                 ELSE
-                    relay_matrix((rlb-1)*3+1:(rlb*3), (clb-1)*3+1:(clb*3)) = scs_offd_block(rgb, cgb)
+                    relay_matrix((rlb-1)*3+1:(rlb*3), (clb-1)*3+1:(clb*3)) = scs_offdiag_block(rgb, cgb)
                 END IF
                 !--------------------------------------------------------------------------------------------------------------------------
             END DO
@@ -497,7 +497,7 @@ CONTAINS
     !--------------------------------------------------------------------------------------------------------------------------------------
 
     !--------------------------------------------------------------------------------------------------------------------------------------
-    FUNCTION dipole_tensor(dxyz, r12, sgm12, Rvdw12) RESULT(TPP)                                                            ! equation (14)
+    FUNCTION gaussian_dipole_tensor(dxyz, r12, sgm12, Rvdw12) RESULT(TGD)                                                            ! equation (14)
         !----------------------------------------------------------------------------------------------------------------------------------
         REAL*8, INTENT(IN)                   :: r12
         REAL*8, INTENT(IN)                   :: sgm12
@@ -506,11 +506,10 @@ CONTAINS
         REAL*8                               :: derf
         REAL*8                               :: erf
         !----------------------------------------------------------------------------------------------------------------------------------
-        REAL*8,              DIMENSION(3,3)  :: TPP       ! dipole-dipole interaction tensor between two QHO Tp-p damped with Fermi damping 
+        REAL*8,              DIMENSION(3,3)  :: TGD       ! dipole-dipole interaction tensor between two QHO Tp-p damped with Fermi damping 
         !----------------------------------------------------------------------------------------------------------------------------------
         ! local vars
         !----------------------------------------------------------------------------------------------------------------------------------
-        REAL*8,              DIMENSION(3,3)  :: TPQ
         REAL*8,              DIMENSION(3,3)  :: r_tensor
         REAL*8                               :: zeta_l
         REAL*8                               :: zeta_r
@@ -522,13 +521,13 @@ CONTAINS
         !----------------------------------------------------------------------------------------------------------------------------------
         
         !----------------------------------------------------------------------------------------------------------------------------------
-        TPP(:,:)    = 0.0d0
+        TGD(:,:)    = 0.0D0
         !----------------------------------------------------------------------------------------------------------------------------------
-        d_param     = 6.0d0
+        d_param     = 6.0D0
         fermi_param = r12/(beta*Rvdw12)
         ratio       = r12/sgm12
-        zeta_l      = (derf(ratio) - (dsqrt(4.0d0/pi) * ratio * dexp(-(ratio**2.0d0)))) / (r12**5.0d0)
-        zeta_r      = (dsqrt(16.0d0/pi) * dexp(-(ratio**2.0d0))) / (sgm12 * sgm12 * sgm12 * r12 * r12)
+        zeta_l      = (derf(ratio) - (dsqrt(4.0D0/pi) * ratio * dexp(-(ratio**2.0D0)))) / (r12**5.0D0)
+        zeta_r      = (dsqrt(16.0D0/pi) * dexp(-(ratio**2.0D0))) / (sgm12 * sgm12 * sgm12 * r12 * r12)
         !----------------------------------------------------------------------------------------------------------------------------------
         
         !----------------------------------------------------------------------------------------------------------------------------------
@@ -542,22 +541,22 @@ CONTAINS
         !----------------------------------------------------------------------------------------------------------------------------------
         
         !----------------------------------------------------------------------------------------------------------------------------------
-        TPQ = r_tensor*3.0d0
+        TGD = r_tensor*3.0D0
         DO i=1,3
-           TPQ(i,i)=TPQ(i,i)-(r12*r12)
+           TGD(i,i)=TGD(i,i)-(r12*r12)
         END DO
         !----------------------------------------------------------------------------------------------------------------------------------
         
         !----------------------------------------------------------------------------------------------------------------------------------
-        TPP = -TPQ * zeta_l + r_tensor * zeta_r
+        TGD = -TGD * zeta_l + r_tensor * zeta_r
         !----------------------------------------------------------------------------------------------------------------------------------
         ! Fermi type damping  
         !----------------------------------------------------------------------------------------------------------------------------------
-        TPP = TPP*(1.0-(1.0/(1.0+EXP(-d_param*(fermi_param-1.0)))))
+        TGD = TGD*(1.0D0-(1.0D0/(1.0D0+EXP(-d_param*(fermi_param-1.0D0)))))
         !----------------------------------------------------------------------------------------------------------------------------------
         RETURN
         !----------------------------------------------------------------------------------------------------------------------------------
-    END FUNCTION dipole_tensor
+    END FUNCTION gaussian_dipole_tensor
     !--------------------------------------------------------------------------------------------------------------------------------------
 
     !--------------------------------------------------------------------------------------------------------------------------------------
@@ -593,7 +592,7 @@ CONTAINS
                         sgm12   = sgm(rgb)
                         Rvdw12  = 2.0D0*Rvdw_iso(rgb)
                         !-------------------------------------------------------------------------------------------------
-                        IF(r12 .LE. mbd_scs_dip_cutoff/bohr) BSCS = BSCS + dipole_tensor(dxyz,r12,sgm12,Rvdw12)
+                        IF(r12 .LE. mbd_scs_dip_cutoff/bohr) BSCS = BSCS + gaussian_dipole_tensor(dxyz,r12,sgm12,Rvdw12)
                         !-------------------------------------------------------------------------------------------------
                     END IF
                 END DO
@@ -610,7 +609,7 @@ CONTAINS
     !--------------------------------------------------------------------------------------------------------------------------------------
 
     !--------------------------------------------------------------------------------------------------------------------------------------
-    FUNCTION scs_offd_block(rgb, cgb) RESULT(BSCS)                  ! off diagonal block of the scs matrix
+    FUNCTION scs_offdiag_block(rgb, cgb) RESULT(BSCS)               ! off diagonal block of the scs matrix
         !----------------------------------------------------------------------------------------------------------------------------------
         INTEGER, INTENT(IN)                  :: rgb                 ! global index for atom 'row'
         INTEGER, INTENT(IN)                  :: cgb                 ! global index for atom 'cow'
@@ -643,60 +642,108 @@ CONTAINS
                     sgm12   = SQRT(sgm(rgb)*sgm(rgb) + sgm(cgb)*sgm(cgb))
                     Rvdw12  = Rvdw_iso(rgb) + Rvdw_iso(cgb)
                     !-------------------------------------------------------------------------------------------------
-                    IF(r12 .LE. mbd_scs_dip_cutoff/bohr) BSCS = BSCS + dipole_tensor(dxyz,r12,sgm12,Rvdw12)
+                    IF(r12 .LE. mbd_scs_dip_cutoff/bohr) BSCS = BSCS + gaussian_dipole_tensor(dxyz,r12,sgm12,Rvdw12)
                     !-------------------------------------------------------------------------------------------------
                 END DO
             END DO
         END DO
         !----------------------------------------------------------------------------------------------------------------------------------
-    END FUNCTION scs_offd_block
+    END FUNCTION scs_offdiag_block
     !--------------------------------------------------------------------------------------------------------------------------------------
 
+!   !--------------------------------------------------------------------------------------------------------------------------------------
+!   FUNCTION lr_bare_dipole_tensor(dxyz,r12,Rvdw12) RESULT(TBDLR)                                           ! long range bare dipole tensor
+!       !----------------------------------------------------------------------------------------------------------------------------------
+!       ! T_{LR} = \frac{1}{1+\exp{-a*(r_{ij}/S_{vdW}-1)}} * T_{BD}
+!       !----------------------------------------------------------------------------------------------------------------------------------
+!       ! T_{LR}: long range dipole-dipole interaction tensor
+!       ! T_{BD}: bare dipole-dipole interaction tensor
+!       !----------------------------------------------------------------------------------------------------------------------------------
+!       REAL*8, DIMENSION(3),   INTENT(IN)  :: dxyz
+!       REAL*8,                 INTENT(IN)  :: r12
+!       REAL*8,                 INTENT(IN)  :: Rvdw12
+!       !----------------------------------------------------------------------------------------------------------------------------------
+!       REAL*8, DIMENSION(3,3)              :: TBDLR
+!       !----------------------------------------------------------------------------------------------------------------------------------
+!       ! local variables
+!       !----------------------------------------------------------------------------------------------------------------------------------
+!       REAL*8, DIMENSION(3,3)              :: r_tensor
+!       REAL*8                              :: d_param
+!       REAL*8                              :: fermi_param
+!       INTEGER                             :: i
+!       INTEGER                             :: j
+!       !----------------------------------------------------------------------------------------------------------------------------------
+!       
+!       !----------------------------------------------------------------------------------------------------------------------------------
+!       ! initialization
+!       !----------------------------------------------------------------------------------------------------------------------------------
+!       TBDLR       = 0.0D0
+!       r_tensor    = 0.0D0
+!       d_param     = 6.0D0
+!       fermi_param = r12/(beta*Rvdw12)
+!       !----------------------------------------------------------------------------------------------------------------------------------
+
+!       !----------------------------------------------------------------------------------------------------------------------------------
+!       ! R_{i}R_{j} tensor
+!       !----------------------------------------------------------------------------------------------------------------------------------
+!       DO i=1,3
+!           DO j=1,3
+!               r_tensor(i,j)=dxyz(i)*dxyz(j)
+!           END DO
+!       END DO
+!       !----------------------------------------------------------------------------------------------------------------------------------
+!       
+!       !----------------------------------------------------------------------------------------------------------------------------------
+!       TBDLR = -3.0D0 * r_tensor
+!       !----------------------------------------------------------------------------------------------------------------------------------
+!       DO i=1,3
+!           TBDLR(i,i) = (TBDLR(i,i) + (r12*r12)) / (r12**5.0D0)
+!       END DO
+!       !----------------------------------------------------------------------------------------------------------------------------------
+!       
+!       !----------------------------------------------------------------------------------------------------------------------------------
+!       TBDLR = TBDLR*(1.0D0/(1.0D0+EXP(-d_param*(fermi_param-1.0D0))))
+!       !----------------------------------------------------------------------------------------------------------------------------------
+!       RETURN
+!   END FUNCTION lr_bare_dipole_tensor
+!   !--------------------------------------------------------------------------------------------------------------------------------------
+
+    function lr_bare_dipole_tensor(dxyz,r_ij,Rvdw12) result(Tij)
+       ! o Tij- Fermi type*Grad_i X Grad_j (1/r)
+       ! tensor derived from bare coulomb potential damped with
+       ! Fermi type damping
+ 
+       real*8,dimension(3),intent(in) :: dxyz
+       real*8,intent(in) :: r_ij
+       real*8,intent(in) :: Rvdw12
+       real*8,dimension(3,3) :: Tij
+       ! This needs declarding for the PGI Architecture
+       real*8 :: erf
+       real*8 :: d_param,fermi_param
+       ! local vars
+       integer :: i_index, j_index
+ 
+       d_param = 6.0
+       fermi_param =r_ij/(beta*Rvdw12)
+ 
+              do i_index=1,3,1
+                do j_index=1,3,1
+                 Tij(i_index,j_index)=3.d0*dxyz(i_index)*dxyz(j_index)
+                enddo
+              enddo
+ 
+              do i_index=1,3,1
+                Tij(i_index,i_index) = Tij(i_index,i_index) - r_ij**2
+              enddo
+              Tij=Tij/r_ij**5
+              Tij=-1.d0*Tij
+ 
+              Tij=Tij*(1.0/(1.0+exp(-d_param*(fermi_param-1.0))))
+       return
+ endfunction lr_bare_dipole_tensor
 
 
 
-
-
-
-
-
-
-
-
-subroutine MBD_TENSOR_MBD_rsSCS(dxyz,r_ij,Rvdw12,beta,Tij)
-      ! o Tij- Fermi type*Grad_i X Grad_j (1/r)
-      ! tensor derived from bare coulomb potential damped with
-      ! Fermi type damping
-
-      real*8,dimension(3),intent(in) :: dxyz
-      real*8,intent(in) :: r_ij
-      real*8,intent(in) :: Rvdw12
-      real*8,intent(in) :: beta
-      real*8,dimension(3,3),intent(out) :: Tij
-      ! This needs declarding for the PGI Architecture
-      real*8 :: erf
-      real*8 :: d_param,fermi_param
-      ! local vars
-      integer :: i_index, j_index
-
-      d_param = 6.0
-      fermi_param =r_ij/(beta*Rvdw12)
-
-             do i_index=1,3,1
-               do j_index=1,3,1
-                Tij(i_index,j_index)=3.d0*dxyz(i_index)*dxyz(j_index)
-               enddo
-             enddo
-
-             do i_index=1,3,1
-               Tij(i_index,i_index) = Tij(i_index,i_index) - r_ij**2
-             enddo
-             Tij=Tij/r_ij**5
-             Tij=-1.d0*Tij
-
-             Tij=Tij*(1.0/(1.0+exp(-d_param*(fermi_param-1.0))))
-      return
-endsubroutine MBD_TENSOR_MBD_rsSCS
 
 
     !--------------------------------------------------------------------------------------------------------------------------------------
@@ -719,7 +766,6 @@ endsubroutine MBD_TENSOR_MBD_rsSCS
         REAL*8                                 :: alpha_free
         REAL*8                                 :: R_vdw_free
         REAL*8                                 :: Rvdw_12
-        REAL*8                                 :: beta
         REAL*8                                 :: CFDM_prefactor
         REAL*8                                 :: E_int
         REAL*8                                 :: E_nonint
@@ -742,27 +788,6 @@ endsubroutine MBD_TENSOR_MBD_rsSCS
         INTEGER                                :: NIMAG
         INTEGER                                :: n_atoms_SL
         INTEGER                                :: LWORK
-        
-        !----------------------------------------------------------------------------------------------------------------------------------
-        ! set beta
-        !----------------------------------------------------------------------------------------------------------------------------------
-        SELECT CASE (flag_xc)
-            CASE (1) ! PBE
-                beta=0.83
-            CASE (2) !PBE0
-                beta=0.85
-            CASE (3) !HSE 
-                beta=0.85
-            CASE DEFAULT
-                beta=1.0
-                WRITE(info_str,'(A)') "***  WARNING range seperated parameter beta is not defined for"
-                CALL output_string(info_str)
-                WRITE(info_str,'(A)') "this fxc defaulting it to 0.0 , which will give MBD energy"
-                CALL output_string(info_str)
-                WRITE(info_str,'(A)') "WITHOUT short range damping"
-                CALL output_string(info_str)
-        END SELECT
-        !----------------------------------------------------------------------------------------------------------------------------------
         
         !----------------------------------------------------------------------------------------------------------------------------------
         IF ( n_periodic .EQ. 0) THEN
@@ -912,7 +937,7 @@ endsubroutine MBD_TENSOR_MBD_rsSCS
                         r_ij=DSQRT((dxyz(1))**2.0d0 +(dxyz(2))**2.0d0 + (dxyz(3))**2.0d0 )
                         Rvdw_12=R_vdw_SL(i_atom)+R_vdw_SL(j_atom)
                         sigma=(r_ij/Rvdw_12)**beta
-                        CALL MBD_TENSOR_MBD_rsSCS(dxyz,r_ij,Rvdw_12,beta,TPP)
+                        TPP = lr_bare_dipole_tensor(dxyz,r_ij,Rvdw_12)
                         CFDM_prefactor=omega_cfdm_SL(i_atom)*omega_cfdm_SL(j_atom)*DSQRT(alpha_eff_SL(i_atom)*alpha_eff_SL(j_atom))
                         
                         ! Transfer each dipole matrix to CFDM hamiltonian i.j accordingly         
@@ -972,7 +997,7 @@ endsubroutine MBD_TENSOR_MBD_rsSCS
                                         IF(r_ij .LE. mbd_cfdm_dip_cutoff/bohr) THEN
                                             Rvdw_12=R_vdw_SL(i_atom)+R_vdw_SL(j_atom)
                                             sigma=(r_ij/Rvdw_12)**beta
-                                            CALL MBD_TENSOR_MBD_rsSCS(dxyz,r_ij,Rvdw_12,beta,TPP) 
+                                            TPP = lr_bare_dipole_tensor(dxyz,r_ij,Rvdw_12)
                                             CFDM_prefactor=omega_cfdm_SL(i_atom)*omega_cfdm_SL(j_atom) * SQRT(alpha_eff_SL(i_atom)*alpha_eff_SL(j_atom))
                                             DO i_index=1,3
                                                 DO j_index=1,3

@@ -13,8 +13,11 @@ MBD_rsSCS.o: MBD_rsSCS.f90
 UTILS.o: UTILS.f90
 	${FC} -o UTILS.o -c UTILS.f90 ${FFLAGS}
 
-test:
+test_C6H6:
 	mpiexec -n 4 ./pmbd.x C6H6.in settings.in > out
+
+test_graphene:
+	mpiexec -n 4 ./pmbd.x graphene.in settings.in > out
 
 clean: 
 	rm -f *.o  *.mod *.x *.optrpt out
