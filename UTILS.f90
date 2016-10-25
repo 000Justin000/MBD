@@ -28,17 +28,21 @@ MODULE  UTILS
     REAL*8,      ALLOCATABLE, DIMENSION(:)      ::   hirshfeld_volume             ! hirshfeld_volume from hirshfeld partioning
     REAL*8,      ALLOCATABLE, DIMENSION(:,:)    ::   coords
     REAL*8,                   DIMENSION(3,3)    ::   lattice_vector
+    REAL*8,                   DIMENSION(3,3)    ::   lattice_vector_SL
     !--------------------------------------------------------------------------------------------------------------------------------------
     INTEGER,                  DIMENSION(2,3)    ::   scsimage                     ! cell index range for periodic images
+    INTEGER,                  DIMENSION(2,3)    ::   cfdmimage                    ! cell index range for periodic images for super cell
+    INTEGER,                  DIMENSION(3)      ::   supercell                    ! supercell for long wavelength coupling
     INTEGER,     ALLOCATABLE, DIMENSION(:)      ::   task_list
     REAL*8                                      ::   beta
     REAL*8,      ALLOCATABLE, DIMENSION(:)      ::   alpha_eff                    ! screened polarizability @ 0 Hz
     REAL*8,      ALLOCATABLE, DIMENSION(:,:)    ::   coupled_atom_pol             ! screened polarizability @ a certain frequency
     REAL*8,      ALLOCATABLE, DIMENSION(:,:)    ::   relay_matrix                 ! 3N x 3N (imaginary) frequency dependent matrix
-    REAL*8,      ALLOCATABLE, DIMENSION(:,:)    ::   screened_alpha
     REAL*8,      ALLOCATABLE, DIMENSION(:)      ::   alpha_omega
+    REAL*8,      ALLOCATABLE, DIMENSION(:)      ::   omega_screened
     REAL*8,      ALLOCATABLE, DIMENSION(:)      ::   sgm                          ! effective dipole spread of QHO, [PRB,75,045407(2007)]
-    REAL*8,      ALLOCATABLE, DIMENSION(:)      ::   Rvdw_iso                             
+    REAL*8,      ALLOCATABLE, DIMENSION(:)      ::   Rvdw_iso
+    REAL*8,      ALLOCATABLE, DIMENSION(:)      ::   Rvdw_eff
     REAL*8,      ALLOCATABLE, DIMENSION(:)      ::   C6_eff
     REAL*8,                   DIMENSION(3,3)    ::   mol_pol_tensor
     REAL*8,                   DIMENSION(0:20)   ::   casimir_omega
@@ -50,6 +54,7 @@ MODULE  UTILS
     INTEGER                                     ::   iproc                        ! process id
     INTEGER                                     ::   ierr                         ! error handle
     INTEGER                                     ::   n_atoms                      ! number of atoms
+    INTEGER                                     ::   n_atoms_SL                   ! number of atoms in supercell
     !--------------------------------------------------------------------------------------------------------------------------------------
     ! scalapack
     !--------------------------------------------------------------------------------------------------------------------------------------
@@ -57,8 +62,10 @@ MODULE  UTILS
     INTEGER                                     ::   npcol                        ! processes grid along col
     INTEGER                                     ::   iprow                        ! process id along col
     INTEGER                                     ::   ipcol                        ! process id along row
-    INTEGER                                     ::   loc_row                      ! local row index for blocks
-    INTEGER                                     ::   loc_col                      ! local col index for blocks
+    INTEGER                                     ::   loc_row                      ! local row size for blocks
+    INTEGER                                     ::   loc_col                      ! local col size for blocks
+    INTEGER                                     ::   loc_row_SL                   ! local row size for supercell
+    INTEGER                                     ::   loc_col_SL                   ! local col size for supercell
     INTEGER                                     ::   icontxt                      ! blacs related
     INTEGER                                     ::   desc_A(9)                    ! description of A matrix
     INTEGER                                     ::   desc_B(9)                    ! description of B matrix
@@ -182,10 +189,11 @@ CONTAINS
         ! JJ: as distributed computing, you can not allocate the same matrix everywhere 3N*3N
         !----------------------------------------------------------------------------------------------------------------------------------
         IF(.NOT. ALLOCATED(relay_matrix))              ALLOCATE(relay_matrix(3*loc_row,3*loc_col))
-        IF(.NOT. ALLOCATED(screened_alpha))            ALLOCATE(screened_alpha(n_atoms,3))
         IF(.NOT. ALLOCATED(sgm))                       ALLOCATE(sgm(n_atoms))
         IF(.NOT. ALLOCATED(Rvdw_iso))                  ALLOCATE(Rvdw_iso(n_atoms))
+        IF(.NOT. ALLOCATED(Rvdw_eff))                  ALLOCATE(Rvdw_eff(n_atoms))
         IF(.NOT. ALLOCATED(alpha_omega))               ALLOCATE(alpha_omega(n_atoms))
+        IF(.NOT. ALLOCATED(omega_screened))            ALLOCATE(omega_screened(n_atoms))
         IF(.NOT. ALLOCATED(coupled_atom_pol))          ALLOCATE(coupled_atom_pol(20,n_atoms))
         IF(.NOT. ALLOCATED(alpha_eff))                 ALLOCATE(alpha_eff(n_atoms))
         IF(.NOT. ALLOCATED(C6_eff))                    ALLOCATE(C6_eff(n_atoms))
@@ -203,6 +211,8 @@ CONTAINS
         !----------------------------------------------------------------------------------------------------------------------------------
         CALL get_beta()
         CALL get_scs_image()
+        CALL get_supercell()
+        CALL get_cfdm_image()
         CALL gauss_legendre_grid()
         !----------------------------------------------------------------------------------------------------------------------------------
         
@@ -233,7 +243,6 @@ CONTAINS
             Rvdw_iso       = 0.0D0 
             alpha_omega    = 0.0D0
             mol_pol_tensor = 0.0D0
-            screened_alpha = 0.0D0
             !------------------------------------------------------------------------------------------------------------------------------
             
             !------------------------------------------------------------------------------------------------------------------------------
@@ -241,7 +250,7 @@ CONTAINS
             !------------------------------------------------------------------------------------------------------------------------------
             DO i_myatom=1,n_atoms
                 CALL get_vdw_param(atom_name(i_myatom),C6_free,alpha_free,R_vdw_free)
-                CALL get_alpha_omega_and_sgm(hirshfeld_volume(i_myatom),C6_free,alpha_free,casimir_omega(i_freq),alpha_omega(i_myatom),sgm(i_myatom))
+                CALL get_alpha_and_sgm(hirshfeld_volume(i_myatom),C6_free,alpha_free,casimir_omega(i_freq),alpha_omega(i_myatom),sgm(i_myatom))
                 Rvdw_iso(i_myatom) = (hirshfeld_volume(i_myatom)**otd)*R_vdw_free               ! JJ : tight
             END DO
             !------------------------------------------------------------------------------------------------------------------------------
@@ -327,7 +336,9 @@ CONTAINS
         !----------------------------------------------------------------------------------------------------------------------------------
         IF(ALLOCATED(sgm))                      DEALLOCATE(sgm)
         IF(ALLOCATED(Rvdw_iso))                 DEALLOCATE(Rvdw_iso)
+        IF(ALLOCATED(Rvdw_eff))                 DEALLOCATE(Rvdw_eff)
         IF(ALLOCATED(alpha_omega))              DEALLOCATE(alpha_omega)
+        IF(ALLOCATED(omega_screened))           DEALLOCATE(omega_screened)
         IF(ALLOCATED(relay_matrix))             DEALLOCATE(relay_matrix)
         IF(ALLOCATED(coupled_atom_pol))         DEALLOCATE(coupled_atom_pol)
         IF(ALLOCATED(alpha_eff))                DEALLOCATE(alpha_eff)
@@ -571,7 +582,6 @@ CONTAINS
         REAL*8                               :: sgm12               ! sigma12
         REAL*8                               :: Rvdw12              ! sum of two Rvdw for atom1 and atom2
         REAL*8,              DIMENSION(3)    :: dxyz                ! displacement between two atoms
-        REAL*8,              DIMENSION(3)    :: coord_curr          ! coordinate of atom in image cell
         !----------------------------------------------------------------------------------------------------------------------------------
         REAL*8,              DIMENSION(3,3)  :: BSCS
         !----------------------------------------------------------------------------------------------------------------------------------
@@ -586,9 +596,9 @@ CONTAINS
                         !-------------------------------------------------------------------------------------------------
                         ! find the coordinate of images
                         !-------------------------------------------------------------------------------------------------
-                        dxyz(:) = img_i*lattice_vector(:,1) + img_j*lattice_vector(:,2) + img_k*lattice_vector(:,3)
+                        dxyz(:) = (0-img_i)*lattice_vector(:,1) + (0-img_j)*lattice_vector(:,2) + (0-img_k)*lattice_vector(:,3)
                         !-------------------------------------------------------------------------------------------------
-                        r12     = SQRT(dxyz(1)*dxyz(1) + dxyz(2)*dxyz(2) + dxyz(3)*dxyz(3))
+                        r12     = DSQRT(dxyz(1)*dxyz(1) + dxyz(2)*dxyz(2) + dxyz(3)*dxyz(3))
                         sgm12   = sgm(rgb)
                         Rvdw12  = 2.0D0*Rvdw_iso(rgb)
                         !-------------------------------------------------------------------------------------------------
@@ -621,7 +631,6 @@ CONTAINS
         REAL*8                               :: sgm12               ! sigma12
         REAL*8                               :: Rvdw12              ! sum of two Rvdw for atom1 and atom2
         REAL*8,              DIMENSION(3)    :: dxyz                ! displacement between two atoms
-        REAL*8,              DIMENSION(3)    :: coord_curr          ! coordinate of atom in image cell
         !----------------------------------------------------------------------------------------------------------------------------------
         REAL*8,              DIMENSION(3,3)  :: BSCS
         !----------------------------------------------------------------------------------------------------------------------------------
@@ -635,11 +644,11 @@ CONTAINS
                     !-------------------------------------------------------------------------------------------------
                     ! find the coordinate of images
                     !-------------------------------------------------------------------------------------------------
-                    coord_curr(:) = coords(:,cgb) + img_i*lattice_vector(:,1) + img_j*lattice_vector(:,2) + img_k*lattice_vector(:,3)
+                    dxyz(:) = (coords(:,rgb) - coords(:,cgb)) &
+                            + ((0-img_i)*lattice_vector(:,1) + (0-img_j)*lattice_vector(:,2) + (0-img_k)*lattice_vector(:,3))
                     !-------------------------------------------------------------------------------------------------
-                    dxyz(:) = coords(:,rgb) - coord_curr(:)
-                    r12     = SQRT(dxyz(1)*dxyz(1) + dxyz(2)*dxyz(2) + dxyz(3)*dxyz(3))
-                    sgm12   = SQRT(sgm(rgb)*sgm(rgb) + sgm(cgb)*sgm(cgb))
+                    r12     = DSQRT(dxyz(1)*dxyz(1) + dxyz(2)*dxyz(2) + dxyz(3)*dxyz(3))
+                    sgm12   = DSQRT(sgm(rgb)*sgm(rgb) + sgm(cgb)*sgm(cgb))
                     Rvdw12  = Rvdw_iso(rgb) + Rvdw_iso(cgb)
                     !-------------------------------------------------------------------------------------------------
                     IF(r12 .LE. mbd_scs_dip_cutoff/bohr) BSCS = BSCS + gaussian_dipole_tensor(dxyz,r12,sgm12,Rvdw12)
@@ -651,93 +660,40 @@ CONTAINS
     END FUNCTION scs_offdiag_block
     !--------------------------------------------------------------------------------------------------------------------------------------
 
-!   !--------------------------------------------------------------------------------------------------------------------------------------
-!   FUNCTION lr_bare_dipole_tensor(dxyz,r12,Rvdw12) RESULT(TBDLR)                                           ! long range bare dipole tensor
-!       !----------------------------------------------------------------------------------------------------------------------------------
-!       ! T_{LR} = \frac{1}{1+\exp{-a*(r_{ij}/S_{vdW}-1)}} * T_{BD}
-!       !----------------------------------------------------------------------------------------------------------------------------------
-!       ! T_{LR}: long range dipole-dipole interaction tensor
-!       ! T_{BD}: bare dipole-dipole interaction tensor
-!       !----------------------------------------------------------------------------------------------------------------------------------
-!       REAL*8, DIMENSION(3),   INTENT(IN)  :: dxyz
-!       REAL*8,                 INTENT(IN)  :: r12
-!       REAL*8,                 INTENT(IN)  :: Rvdw12
-!       !----------------------------------------------------------------------------------------------------------------------------------
-!       REAL*8, DIMENSION(3,3)              :: TBDLR
-!       !----------------------------------------------------------------------------------------------------------------------------------
-!       ! local variables
-!       !----------------------------------------------------------------------------------------------------------------------------------
-!       REAL*8, DIMENSION(3,3)              :: r_tensor
-!       REAL*8                              :: d_param
-!       REAL*8                              :: fermi_param
-!       INTEGER                             :: i
-!       INTEGER                             :: j
-!       !----------------------------------------------------------------------------------------------------------------------------------
-!       
-!       !----------------------------------------------------------------------------------------------------------------------------------
-!       ! initialization
-!       !----------------------------------------------------------------------------------------------------------------------------------
-!       TBDLR       = 0.0D0
-!       r_tensor    = 0.0D0
-!       d_param     = 6.0D0
-!       fermi_param = r12/(beta*Rvdw12)
-!       !----------------------------------------------------------------------------------------------------------------------------------
-
-!       !----------------------------------------------------------------------------------------------------------------------------------
-!       ! R_{i}R_{j} tensor
-!       !----------------------------------------------------------------------------------------------------------------------------------
-!       DO i=1,3
-!           DO j=1,3
-!               r_tensor(i,j)=dxyz(i)*dxyz(j)
-!           END DO
-!       END DO
-!       !----------------------------------------------------------------------------------------------------------------------------------
-!       
-!       !----------------------------------------------------------------------------------------------------------------------------------
-!       TBDLR = -3.0D0 * r_tensor
-!       !----------------------------------------------------------------------------------------------------------------------------------
-!       DO i=1,3
-!           TBDLR(i,i) = (TBDLR(i,i) + (r12*r12)) / (r12**5.0D0)
-!       END DO
-!       !----------------------------------------------------------------------------------------------------------------------------------
-!       
-!       !----------------------------------------------------------------------------------------------------------------------------------
-!       TBDLR = TBDLR*(1.0D0/(1.0D0+EXP(-d_param*(fermi_param-1.0D0))))
-!       !----------------------------------------------------------------------------------------------------------------------------------
-!       RETURN
-!   END FUNCTION lr_bare_dipole_tensor
-!   !--------------------------------------------------------------------------------------------------------------------------------------
-
     !--------------------------------------------------------------------------------------------------------------------------------------
-    FUNCTION lr_bare_dipole_tensor(dxyz,r12,Rvdw12) RESULT(TBDLR)
+    FUNCTION lr_bare_dipole_tensor(dxyz,r12,Rvdw12) RESULT(TBDLR)                                           ! long range bare dipole tensor
         !----------------------------------------------------------------------------------------------------------------------------------
         ! T_{LR} = \frac{1}{1+\exp{-a*(r_{ij}/S_{vdW}-1)}} * T_{BD}
         !----------------------------------------------------------------------------------------------------------------------------------
         ! T_{LR}: long range dipole-dipole interaction tensor
         ! T_{BD}: bare dipole-dipole interaction tensor
         !----------------------------------------------------------------------------------------------------------------------------------
-        REAL*8, DIMENSION(3),  INTENT(IN)  :: dxyz
-        REAL*8,                INTENT(IN)  :: r12
-        REAL*8,                INTENT(IN)  :: Rvdw12
+        REAL*8, DIMENSION(3),   INTENT(IN)  :: dxyz
+        REAL*8,                 INTENT(IN)  :: r12
+        REAL*8,                 INTENT(IN)  :: Rvdw12
         !----------------------------------------------------------------------------------------------------------------------------------
-        REAL*8, DIMENSION(3,3)             :: TBDLR
+        REAL*8, DIMENSION(3,3)              :: TBDLR
         !----------------------------------------------------------------------------------------------------------------------------------
-        ! local vars
+        ! local variables
         !----------------------------------------------------------------------------------------------------------------------------------
-        REAL*8, DIMENSION(3,3)             :: r_tensor
-        REAL*8                             :: d_param
-        REAL*8                             :: fermi_param
-        INTEGER                            :: i
-        INTEGER                            :: j
+        REAL*8, DIMENSION(3,3)              :: r_tensor
+        REAL*8                              :: d_param
+        REAL*8                              :: fermi_param
+        INTEGER                             :: i
+        INTEGER                             :: j
         !----------------------------------------------------------------------------------------------------------------------------------
         
         !----------------------------------------------------------------------------------------------------------------------------------
-        r_tensor    = 0.0D0
+        ! initialization
+        !----------------------------------------------------------------------------------------------------------------------------------
         TBDLR       = 0.0D0
+        r_tensor    = 0.0D0
         d_param     = 6.0D0
         fermi_param = r12/(beta*Rvdw12)
         !----------------------------------------------------------------------------------------------------------------------------------
-     
+        
+        !----------------------------------------------------------------------------------------------------------------------------------
+        ! R_{i}R_{j} tensor
         !----------------------------------------------------------------------------------------------------------------------------------
         DO i=1,3
             DO j=1,3
@@ -747,323 +703,179 @@ CONTAINS
         !----------------------------------------------------------------------------------------------------------------------------------
         
         !----------------------------------------------------------------------------------------------------------------------------------
-        TBDLR = 3.0D0 * r_tensor
-        
+        TBDLR = -3.0D0 * r_tensor
+        !----------------------------------------------------------------------------------------------------------------------------------
         DO i=1,3
-            TBDLR(i,i) = TBDLR(i,i) - r12**2.0D0
+            TBDLR(i,i) = (TBDLR(i,i) + (r12*r12))
         END DO
-        TBDLR=TBDLR/r12**5.0D0
-        TBDLR=-1.0D0*TBDLR
-     
-        TBDLR=TBDLR*(1.0D0/(1.0D0+EXP(-d_param*(fermi_param-1.0D0))))
+        !----------------------------------------------------------------------------------------------------------------------------------
+        TBDLR = TBDLR / (r12**5.0D0)
+        !----------------------------------------------------------------------------------------------------------------------------------
+        
+        !----------------------------------------------------------------------------------------------------------------------------------
+        TBDLR = TBDLR*(1.0D0/(1.0D0+EXP(-d_param*(fermi_param-1.0D0))))
+        !----------------------------------------------------------------------------------------------------------------------------------
         RETURN
     END FUNCTION lr_bare_dipole_tensor
     !--------------------------------------------------------------------------------------------------------------------------------------
-
-
-
-
 
     !--------------------------------------------------------------------------------------------------------------------------------------
     SUBROUTINE get_mbd_rSCS(ene_mbd_rsSCS)
     !--------------------------------------------------------------------------------------------------------------------------------------
         REAL*8,  DIMENSION(:,:), ALLOCATABLE   :: cfdm_hamiltonian 
-        REAL*8,  DIMENSION(:,:), ALLOCATABLE   :: cfdm_hamiltonian_periodic
-        REAL*8,  DIMENSION(:,:), ALLOCATABLE   :: coords_SL
         REAL*8,  DIMENSION(:),   ALLOCATABLE   :: cfdm_eigenvalues
-        REAL*8,  DIMENSION(:),   ALLOCATABLE   :: omega_cfdm_SL
-        REAL*8,  DIMENSION(:),   ALLOCATABLE   :: R_vdw_SL
-        REAL*8,  DIMENSION(:),   ALLOCATABLE   :: alpha_eff_SL
-        REAL*8,  DIMENSION(:),   ALLOCATABLE   :: WORK
-        REAL*8,  DIMENSION(:),   ALLOCATABLE   :: task_list_SL  
-        REAL*8,  DIMENSION(3,3)                :: TPP
-        REAL*8,  DIMENSION(3,3)                :: lattice_vector_SL
-        REAL*8,  DIMENSION(3)                  :: dxyz,coord_curr
-        REAL*8                                 :: r_ij
+        REAL*8,  DIMENSION(:,:), ALLOCATABLE   :: cfdm_eigenvectors
         REAL*8                                 :: C6_free
         REAL*8                                 :: alpha_free
         REAL*8                                 :: R_vdw_free
-        REAL*8                                 :: Rvdw_12
-        REAL*8                                 :: CFDM_prefactor
         REAL*8                                 :: E_int
         REAL*8                                 :: E_nonint
-        REAL*8                                 :: sigma
         REAL*8                                 :: ene_mbd_rsSCS
-        INTEGER                                :: errorflag
-        INTEGER                                :: i_atom
-        INTEGER                                :: j_atom
         INTEGER                                :: SL_i                      ! MBD super cell index's
         INTEGER                                :: SL_j                      ! MBD super cell index's
         INTEGER                                :: SL_k                      ! MBD super cell index's
-        INTEGER                                :: i_index                   ! 3x3 block index
-        INTEGER                                :: j_index                   ! 3x3 block index
-        INTEGER                                :: i_lattice                 ! lattice increament index
-        INTEGER                                :: j_lattice                 ! lattice increament index
-        INTEGER                                :: k_lattice                 ! lattice increament index
-        INTEGER                                :: periodic_cell_i
-        INTEGER                                :: periodic_cell_j
-        INTEGER                                :: periodic_cell_k
-        INTEGER                                :: NIMAG
-        INTEGER                                :: n_atoms_SL
-        INTEGER                                :: LWORK
+        INTEGER                                :: nimag
+        !----------------------------------------------------------------------------------------------------------------------------------
+        INTEGER                                :: i_atom                ! iterator through all atoms
+        INTEGER                                :: rlb                   ! local block row index
+        INTEGER                                :: clb                   ! local block col index
+        INTEGER                                :: rgb                   ! global block row index
+        INTEGER                                :: cgb                   ! global block col index
+        !----------------------------------------------------------------------------------------------------------------------------------
+        INTEGER                                :: DESC_A(9)
+        INTEGER                                :: DESC_Z(9)
+        INTEGER                                :: info
+        REAL*8,  DIMENSION(:), ALLOCATABLE     :: work
+        INTEGER                                :: lwork
+        !----------------------------------------------------------------------------------------------------------------------------------
         
         !----------------------------------------------------------------------------------------------------------------------------------
-        IF ( n_periodic .EQ. 0) THEN
+        DO i_atom =1,n_atoms
+            !--------------------------------------------------------------------------------------------------------------------------
+            CALL get_vdw_param(atom_name(i_atom),C6_free,alpha_free,R_vdw_free)
+            !--------------------------------------------------------------------------------------------------------------------------
+            Rvdw_eff(i_atom)= R_vdw_free*((alpha_eff(i_atom)/alpha_free)**otd)
+            omega_screened(i_atom) = (4.d0/3.d0)*C6_eff(i_atom)/(alpha_eff(i_atom)**2.0)
+        END DO
+        !------------------------------------------------------------------------------------------------------------------------------
+        
+        !------------------------------------------------------------------------------------------------------------------------------
+        ! number of atoms in super cell 
+        !------------------------------------------------------------------------------------------------------------------------------
+        SL_i = supercell(1)
+        SL_j = supercell(2)
+        SL_k = supercell(3)
+        !------------------------------------------------------------------------------------------------------------------------------
+        n_atoms_SL = n_atoms * SL_i * SL_j * SL_k
+        !------------------------------------------------------------------------------------------------------------------------------
+        WRITE(info_str,'(2X,A,i3,A,i3,A,i3,A)') "| Creating super cell of dimension",  SL_i," X ", SL_j," X ", SL_k, " in MBD calculation" 
+        CALL output_string(info_str)
+        WRITE(info_str,'(2x,"| containing", I6,A)') n_atoms_SL, "  atom"
+        CALL output_string(info_str)
+        !------------------------------------------------------------------------------------------------------------------------------
+        
+        !------------------------------------------------------------------------------------------------------------------------------
+        loc_row_SL = INT(CEILING(DBLE(n_atoms_SL)/DBLE(nprow) - eps) + eps)
+        loc_col_SL = INT(CEILING(DBLE(n_atoms_SL)/DBLE(npcol) - eps) + eps)
+        !------------------------------------------------------------------------------------------------------------------------------
+        
+        !------------------------------------------------------------------------------------------------------------------------------
+        ! allocation
+        !------------------------------------------------------------------------------------------------------------------------------
+        lwork = 10*3*n_atoms_SL
+        !------------------------------------------------------------------------------------------------------------------------------
+        IF(.NOT. ALLOCATED(cfdm_hamiltonian))             ALLOCATE(cfdm_hamiltonian (3*loc_row_SL,3*loc_col_SL))
+        IF(.NOT. ALLOCATED(cfdm_eigenvalues))             ALLOCATE(cfdm_eigenvalues (3*n_atoms_SL))
+        IF(.NOT. ALLOCATED(cfdm_eigenvectors))            ALLOCATE(cfdm_eigenvectors(3*loc_row_SL,3*loc_col_SL))
+        !------------------------------------------------------------------------------------------------------------------------------
+        IF(.NOT. ALLOCATED(work))                         ALLOCATE(work(lwork))
+        !------------------------------------------------------------------------------------------------------------------------------
+        
+        !------------------------------------------------------------------------------------------------------------------------------
+        ! initialization
+        !------------------------------------------------------------------------------------------------------------------------------
+        cfdm_hamiltonian  = 0.0D0 
+        cfdm_eigenvalues  = 0.0D0
+        cfdm_eigenvectors = 0.0D0 
+        !------------------------------------------------------------------------------------------------------------------------------
+        
+        !----------------------------------------------------------------------------------------------------------------------------------
+        ! Construct CFDM hamiltonian matrix for cluster or unit cell
+        !----------------------------------------------------------------------------------------------------------------------------------
+        rlb = 0
+        !----------------------------------------------------------------------------------------------------------------------------------
+        DO rgb = (iprow+1), n_atoms_SL, nprow
             !------------------------------------------------------------------------------------------------------------------------------
-            ! For Cluster calculation NO super cell needed intiate this index so as to avoide any invalid 
-            ! floting point when normalizing energy in case of cluster/molecule
+            rlb = rlb + 1
             !------------------------------------------------------------------------------------------------------------------------------
-            SL_i = 1 
-            SL_j = 1
-            SL_k = 1
+            clb = 0
             !------------------------------------------------------------------------------------------------------------------------------
-            ! number of atoms in cluster /molecule
-            !------------------------------------------------------------------------------------------------------------------------------
-            n_atoms_SL = n_atoms
-            !------------------------------------------------------------------------------------------------------------------------------
-            IF(.NOT. ALLOCATED(cfdm_hamiltonian))          ALLOCATE(cfdm_hamiltonian(3*n_atoms_SL,3*n_atoms_SL)) 
-            IF(.NOT. ALLOCATED(cfdm_eigenvalues))          ALLOCATE(cfdm_eigenvalues(3*n_atoms_SL)) 
-            IF(.NOT. ALLOCATED(coords_SL))                 ALLOCATE(coords_SL(3,n_atoms_SL)) 
-            IF(.NOT. ALLOCATED(omega_cfdm_SL))             ALLOCATE(omega_cfdm_SL(n_atoms_SL))
-            IF(.NOT. ALLOCATED(R_vdw_SL))                  ALLOCATE(R_vdw_SL(n_atoms_SL))
-            IF(.NOT. ALLOCATED(alpha_eff_SL))              ALLOCATE(alpha_eff_SL(n_atoms_SL))
-            IF(.NOT. ALLOCATED(WORK))                      ALLOCATE(WORK((3*n_atoms_SL)*(3+(3*n_atoms_SL)/2)))
-            IF(.NOT. ALLOCATED(task_list_SL))              ALLOCATE(task_list_SL(n_atoms_SL))
-            !------------------------------------------------------------------------------------------------------------------------------
-            ! MUST BE INTIATED TO ZERO TO AVOID ANY POSSIBLE noise in LAPACK call
-            !------------------------------------------------------------------------------------------------------------------------------
-            cfdm_hamiltonian=0.0d0 
-            cfdm_eigenvalues=0.0d0
-            !------------------------------------------------------------------------------------------------------------------------------
-            ! RECOMPUTE TASK LIST DEPENDING ON NUMBER OF ATOMS IN CLUSTER/MOLECULE
-            !------------------------------------------------------------------------------------------------------------------------------
-            DO i_atom=1,n_atoms_SL
-                task_list_SL(i_atom) = MOD(i_atom,nproc)  
-            END DO
-            !------------------------------------------------------------------------------------------------------------------------------
-            DO i_atom =1,n_atoms
-                R_vdw_free=0.0d0
-                alpha_free=0.0d0
-                C6_free=0.d0
-                CALL get_vdw_param(atom_name(i_atom),C6_free,alpha_free,R_vdw_free)
+            DO cgb = (ipcol+1), n_atoms_SL, npcol
                 !--------------------------------------------------------------------------------------------------------------------------
-                R_vdw_SL(i_atom)= R_vdw_free*((alpha_eff(i_atom)/alpha_free)**otd)
-                omega_cfdm_SL(i_atom) = (4.d0/3.d0)*C6_eff(i_atom)/(alpha_eff(i_atom)**2.0)
-                coords_SL(:,i_atom)   = coords(:,i_atom)
-                alpha_eff_SL(i_atom) = alpha_eff(i_atom)
+                clb = clb + 1
+                !--------------------------------------------------------------------------------------------------------------------------
+                IF (rgb .EQ. cgb) THEN
+                    cfdm_hamiltonian((rlb-1)*3+1:(rlb*3), (clb-1)*3+1:(clb*3)) = cfdm_diag_block(rgb)
+                ELSE
+                    cfdm_hamiltonian((rlb-1)*3+1:(rlb*3), (clb-1)*3+1:(clb*3)) = cfdm_offdiag_block(rgb, cgb)
+                END IF
+                !--------------------------------------------------------------------------------------------------------------------------
             END DO
             !------------------------------------------------------------------------------------------------------------------------------
-        ELSE
-            !------------------------------------------------------------------------------------------------------------------------------
-            IF(.NOT. mbd_scs_vacuum_axis(1)) THEN
-                SL_i = CEILING((mbd_supercell_cutoff/bohr)/SQRT(lattice_vector(1,1)**2 + lattice_vector(2,1)**2 +lattice_vector(3,1)**2))
-            ELSE
-                SL_i = 1 
-            END IF
-            !------------------------------------------------------------------------------------------------------------------------------
-            IF(.NOT. mbd_scs_vacuum_axis(2)) THEN
-                SL_j = CEILING((mbd_supercell_cutoff/bohr)/SQRT(lattice_vector(1,2)**2 + lattice_vector(2,2)**2 +lattice_vector(3,2)**2)) 
-            ELSE
-                SL_j = 1 
-            END IF
-            !------------------------------------------------------------------------------------------------------------------------------
-            IF(.NOT. mbd_scs_vacuum_axis(3)) THEN
-                SL_k = CEILING((mbd_supercell_cutoff/bohr)/SQRT(lattice_vector(1,3)**2 + lattice_vector(2,3)**2 +lattice_vector(3,3)**2)) 
-            ELSE
-                SL_k = 1 
-            END IF
-            !------------------------------------------------------------------------------------------------------------------------------
-          
-            !------------------------------------------------------------------------------------------------------------------------------
-            ! number of atoms in super cell 
-            !------------------------------------------------------------------------------------------------------------------------------
-            n_atoms_SL = n_atoms*SL_i*SL_j*SL_k 
-            !------------------------------------------------------------------------------------------------------------------------------
-            WRITE(info_str,'(2X,A,i3,A,i3,A,i3,A)') "| Creating super cell of dimension",  SL_i," X ", SL_j," X ", SL_k, " in MBD calculation" 
-            CALL output_string(info_str)
-            WRITE(info_str,'(2x,"| containing", I6,A)') n_atoms_SL, "  atom"
-            CALL output_string(info_str)
-            !------------------------------------------------------------------------------------------------------------------------------
-            IF(.NOT. ALLOCATED(cfdm_hamiltonian))             ALLOCATE(cfdm_hamiltonian(3*n_atoms_SL,3*n_atoms_SL)) 
-            IF(.NOT. ALLOCATED(cfdm_hamiltonian_periodic))    ALLOCATE(cfdm_hamiltonian_periodic(3*n_atoms_SL,3*n_atoms_SL)) 
-            IF(.NOT. ALLOCATED(cfdm_eigenvalues))             ALLOCATE(cfdm_eigenvalues(3*n_atoms_SL)) 
-            IF(.NOT. ALLOCATED(coords_SL))                    ALLOCATE(coords_SL(3,n_atoms_SL)) 
-            IF(.NOT. ALLOCATED(omega_cfdm_SL))                ALLOCATE(omega_cfdm_SL(n_atoms_SL))
-            IF(.NOT. ALLOCATED(R_vdw_SL))                     ALLOCATE(R_vdw_SL(n_atoms_SL))
-            IF(.NOT. ALLOCATED(alpha_eff_SL))                 ALLOCATE(alpha_eff_SL(n_atoms_SL))
-            IF(.NOT. ALLOCATED(WORK))                         ALLOCATE(WORK(3*n_atoms_SL*(3+(3*n_atoms_SL)/2)))
-            IF(.NOT. ALLOCATED(task_list_SL))                 ALLOCATE(task_list_SL(n_atoms_SL))
-            !------------------------------------------------------------------------------------------------------------------------------
-            ! MUST BE INTIATED TO ZERO TO AVOID ANY POSSIBLE noise in LAPACK call
-            !------------------------------------------------------------------------------------------------------------------------------
-            cfdm_hamiltonian = 0.0d0 
-            cfdm_eigenvalues = 0.0d0
-            cfdm_hamiltonian_periodic = 0.d0 
-            !------------------------------------------------------------------------------------------------------------------------------
-            ! RECOMPUTE TASK LIST DEPENDING ON NUMBER OF ATOMS IN SUPERCELL/MOLECULE
-            !------------------------------------------------------------------------------------------------------------------------------
-            DO i_atom=1,n_atoms_SL 
-                task_list_SL(i_atom) = MOD(i_atom,nproc) 
-            END DO
-            !------------------------------------------------------------------------------------------------------------------------------
-            ! Get all the parameter required for MBD with super cell calculation
-            !------------------------------------------------------------------------------------------------------------------------------
-            j_atom = 0
-            DO i_lattice = 0, SL_i-1
-                DO j_lattice = 0, SL_j-1
-                    DO k_lattice = 0, SL_k-1
-                        DO i_atom = 1, n_atoms             ! <--- atom index
-                            j_atom = j_atom +1             ! <--- dummy index supercell
-                            coords_SL(:,j_atom) = coords(:,i_atom) + i_lattice*lattice_vector(:,1) + j_lattice*lattice_vector(:,2) + k_lattice*lattice_vector(:,3)   
-                            R_vdw_free=0.0d0
-                            alpha_free=0.0d0  
-                            CALL get_vdw_param(atom_name(i_atom),C6_free,alpha_free,R_vdw_free) !FIXME
-                            
-                            R_vdw_SL(j_atom)=R_vdw_free*((alpha_eff(i_atom)/alpha_free)**otd)
-                            alpha_eff_SL(j_atom) = alpha_eff(i_atom)
-                            omega_cfdm_SL(j_atom) =(4.d0/3.d0)*C6_eff(i_atom)/(alpha_eff(i_atom)**2.0)
-                        END DO 
-                    END DO            
-                END DO            
-            END DO            
-            lattice_vector_SL(:,1)  = lattice_vector(:,1)*SL_i 
-            lattice_vector_SL(:,2)  = lattice_vector(:,2)*SL_j 
-            lattice_vector_SL(:,3)  = lattice_vector(:,3)*SL_k 
-            !------------------------------------------------------------------------------------------------------------------------------
-        END IF 
-        !----------------------------------------------------------------------------------------------------------------------------------
-        
-        !----------------------------------------------------------------------------------------------------------------------------------
-        ! Construct CFDM hamiltonian matrix 
-        !----------------------------------------------------------------------------------------------------------------------------------
-        DO i_atom=1,n_atoms_SL
-            IF(iproc .EQ. task_list_SL(i_atom)) THEN
-                DO j_atom=i_atom,n_atoms_SL
-                    IF(i_atom .EQ. j_atom) THEN
-                        DO i_index=1,3
-                            DO j_index=1,3
-                                IF(i_index .EQ. j_index) THEN
-                                    cfdm_hamiltonian(3*i_atom-3+i_index,3*j_atom-3+j_index) = omega_cfdm_SL(i_atom)**2.0
-                                END IF  
-                            END DO
-                        END DO
-                    ELSE
-                        r_ij = 0.0d0
-                        TPP  = 0.0d0
-                        dxyz = 0.d0
-                        dxyz(:) = coords_SL(:,i_atom)-coords_SL(:,j_atom)
-                        r_ij=DSQRT((dxyz(1))**2.0d0 +(dxyz(2))**2.0d0 + (dxyz(3))**2.0d0 )
-                        Rvdw_12=R_vdw_SL(i_atom)+R_vdw_SL(j_atom)
-                        sigma=(r_ij/Rvdw_12)**beta
-                        TPP = lr_bare_dipole_tensor(dxyz,r_ij,Rvdw_12)
-                        CFDM_prefactor=omega_cfdm_SL(i_atom)*omega_cfdm_SL(j_atom)*DSQRT(alpha_eff_SL(i_atom)*alpha_eff_SL(j_atom))
-                        
-                        ! Transfer each dipole matrix to CFDM hamiltonian i.j accordingly         
-                        DO i_index=1,3
-                            DO j_index=1,3
-                                cfdm_hamiltonian(3*i_atom-3+i_index,3*j_atom-3+j_index) = TPP(i_index,j_index)*CFDM_prefactor
-                                cfdm_hamiltonian(3*j_atom-3+j_index,3*i_atom-3+i_index) = TPP(i_index,j_index)*CFDM_prefactor
-                            END DO
-                        END DO
-                    END IF
-                END DO
-            END IF
         END DO
         !----------------------------------------------------------------------------------------------------------------------------------
         
-        CALL sync_tensors(cfdm_hamiltonian,3*n_atoms_SL,3*n_atoms_SL)
+        !----------------------------------------------------------------------------------------------------------------------------------
+        ! set up the description array for A and B
+        !----------------------------------------------------------------------------------------------------------------------------------
+        DESC_A(1) = 1
+        DESC_A(2) = ICONTXT
+        DESC_A(3) = 3*n_atoms_SL
+        DESC_A(4) = 3*n_atoms_SL
+        DESC_A(5) = 3
+        DESC_A(6) = 3
+        DESC_A(7) = 0
+        DESC_A(8) = 0
+        DESC_A(9) = 3*loc_row_SL
+        !----------------------------------------------------------------------------------------------------------------------------------
+        DESC_Z(1) = 1
+        DESC_Z(2) = ICONTXT
+        DESC_Z(3) = 3*n_atoms_SL
+        DESC_Z(4) = 3*n_atoms_SL
+        DESC_Z(5) = 3
+        DESC_Z(6) = 3
+        DESC_Z(7) = 0
+        DESC_Z(8) = 0
+        DESC_Z(9) = 3*loc_row_SL
+        !----------------------------------------------------------------------------------------------------------------------------------
+        lwork = 100000
+        info  = 0
+        !----------------------------------------------------------------------------------------------------------------------------------
+        CALL PDSYEV('N', 'L', 3*n_atoms_SL, cfdm_hamiltonian, 1, 1, DESC_A, cfdm_eigenvalues, cfdm_eigenvectors, 1, 1, DESC_Z, work, lwork, info)
+        !----------------------------------------------------------------------------------------------------------------------------------
         
         !----------------------------------------------------------------------------------------------------------------------------------
-        ! Adds dipole field due to image cells based spherical cutoff mbd_cfdm_dip_cutoff
+        E_int         = 0.0D0
+        E_nonint      = 0.0D0
+        ene_mbd_rsSCS = 0.0D0
         !----------------------------------------------------------------------------------------------------------------------------------
-        IF (n_periodic .GT. 0) THEN 
-            IF(.NOT. mbd_scs_vacuum_axis(1)) THEN
-                periodic_cell_i = CEILING((mbd_cfdm_dip_cutoff/bohr)/SQRT(lattice_vector_SL(1,1)**2 + lattice_vector_SL(2,1)**2 + lattice_vector_SL(3,1)**2))
-            ELSE
-                periodic_cell_i = 0 
-            END IF   
-            
-            IF (.NOT. mbd_scs_vacuum_axis(2)) THEN
-                periodic_cell_j = CEILING((mbd_cfdm_dip_cutoff/bohr)/SQRT(lattice_vector_SL(1,2)**2 + lattice_vector_SL(2,2)**2 + lattice_vector_SL(3,2)**2)) 
-            ELSE
-                periodic_cell_j = 0 
-            END IF   
-            
-            IF (.NOT.mbd_scs_vacuum_axis(3)) THEN
-                periodic_cell_k = CEILING((mbd_cfdm_dip_cutoff/bohr)/SQRT(lattice_vector_SL(1,3)**2 + lattice_vector_SL(2,3)**2 + lattice_vector_SL(3,3)**2)) 
-            ELSE
-                periodic_cell_k = 0 
-            END IF
-         
-            DO i_lattice = -periodic_cell_i, periodic_cell_i
-                DO j_lattice = -periodic_cell_j, periodic_cell_j
-                    DO k_lattice = -periodic_cell_k, periodic_cell_k
-                        IF((ABS(i_lattice) .NE. 0) .OR. (ABS(j_lattice) .NE. 0) .OR. (ABS(k_lattice) .NE. 0)) THEN
-                            DO i_atom=1,n_atoms_SL
-                                IF(iproc .EQ. task_list_SL(i_atom)) THEN
-                                    ! LOOP GOES OVER UPPPER TRIANGLE OF HAMILTONIAN 
-                                    DO j_atom=i_atom,n_atoms_SL
-                                        r_ij=0.0d0
-                                        TPP=0.0d0
-                                        dxyz=0.d0
-                                        coord_curr(:) = coords_SL(:,i_atom) + i_lattice*lattice_vector_SL(:,1) + &
-                                                                              j_lattice*lattice_vector_SL(:,2) + &
-                                                                              k_lattice*lattice_vector_SL(:,3)
-                                        dxyz(:) = coords_SL(:,j_atom) - coord_curr(:)
-                                        r_ij = DSQRT((dxyz(1))**2.0d0 +(dxyz(2))**2.0d0 + (dxyz(3))**2.0d0 )
-                                        
-                                        IF(r_ij .LE. mbd_cfdm_dip_cutoff/bohr) THEN
-                                            Rvdw_12=R_vdw_SL(i_atom)+R_vdw_SL(j_atom)
-                                            sigma=(r_ij/Rvdw_12)**beta
-                                            TPP = lr_bare_dipole_tensor(dxyz,r_ij,Rvdw_12)
-                                            CFDM_prefactor=omega_cfdm_SL(i_atom)*omega_cfdm_SL(j_atom) * SQRT(alpha_eff_SL(i_atom)*alpha_eff_SL(j_atom))
-                                            DO i_index=1,3
-                                                DO j_index=1,3
-                                                    ! FILL UPPER BLOCK
-                                                    cfdm_hamiltonian_periodic(3*i_atom-3+i_index,3*j_atom-3+j_index) = &
-                                                    cfdm_hamiltonian_periodic(3*i_atom-3+i_index,3*j_atom-3+j_index) + (TPP(i_index,j_index)*CFDM_prefactor)
-                                                    ! FILL LOWER BLOCK ALSO MAKE SURE THAT YOU DONT ADD FIELD
-                                                    ! CONTRIBUTION TWO TIMES IN DIAGONAL BLOCK below is the check
-                                                    IF (i_atom .NE. j_atom) THEN
-                                                        cfdm_hamiltonian_periodic(3*j_atom-3+j_index,3*i_atom-3+i_index) = &
-                                                        cfdm_hamiltonian_periodic(3*j_atom-3+j_index,3*i_atom-3+i_index) + (TPP(i_index,j_index)*CFDM_prefactor)
-                                                    END IF
-                                                END DO
-                                            END DO
-                                        END IF 
-                                    END DO
-                                END IF
-                            END DO
-                        END IF
-                    END DO
-                END DO
-            END DO
-            CALL sync_tensors(cfdm_hamiltonian_periodic,3*n_atoms_SL,3*n_atoms_SL)
-            cfdm_hamiltonian = cfdm_hamiltonian + cfdm_hamiltonian_periodic
-        END IF
-        
-        errorflag=0
-        LWORK=3*n_atoms_SL*(3+(3*n_atoms_SL)/2)
-        CALL DSYEV('V','U',3*n_atoms_SL,cfdm_hamiltonian,3*n_atoms_SL,cfdm_eigenvalues,WORK,LWORK,errorflag)
-        
-        E_int=0.0d0
-        E_nonint =0.0d0
-        ene_mbd_rsSCS = 0.0
         NIMAG=0 
-        IF(errorflag .EQ. 0) THEN
-            DO i_atom = 1,n_atoms_SL
-                E_nonint = E_nonint + omega_cfdm_SL(i_atom)    
+        !----------------------------------------------------------------------------------------------------------------------------------
+        IF(info .EQ. 0) THEN
+            DO i_atom = 1,n_atoms
+                E_nonint = E_nonint + 3*omega_screened(i_atom)
             END DO
             
             DO i_atom =1,3*n_atoms_SL
-                IF(cfdm_eigenvalues(i_atom) .GE. 0.0d0) THEN
+                IF(cfdm_eigenvalues(i_atom) .GE. 0.0D0) THEN
                     E_int = E_int + DSQRT(cfdm_eigenvalues(i_atom))
                 ELSE
                     NIMAG= NIMAG +1  
                 END IF 
             END DO
             
-            ene_mbd_rsSCS = ((0.5*E_int)-(1.5* E_nonint))/(SL_i*SL_j*SL_k)
+            ene_mbd_rsSCS = (0.5*E_int)/(SL_i*SL_j*SL_k) - (0.5*E_nonint)
+            
             IF(NIMAG .GT. 0) THEN
                 WRITE(info_str,'(A,I4,A)')"***WARNING: found ",NIMAG," negative eigenvalues in MBD energy calculation."
                 CALL output_string(info_str)  
@@ -1072,17 +884,14 @@ CONTAINS
             WRITE(info_str,*)"***Error:- Digonalization of CFDM hamiltonian failed"
             CALL output_string(info_str)
         END IF
+        !----------------------------------------------------------------------------------------------------------------------------------
         
         !----------------------------------------------------------------------------------------------------------------------------------
         ! clean up
         !----------------------------------------------------------------------------------------------------------------------------------
         IF(ALLOCATED(cfdm_hamiltonian))             DEALLOCATE(cfdm_hamiltonian)
-        IF(ALLOCATED(cfdm_hamiltonian_periodic))    DEALLOCATE(cfdm_hamiltonian_periodic) 
         IF(ALLOCATED(cfdm_eigenvalues))             DEALLOCATE(cfdm_eigenvalues)
-        IF(ALLOCATED(coords_SL))                    DEALLOCATE(coords_SL)
-        IF(ALLOCATED(omega_cfdm_SL))                DEALLOCATE(omega_cfdm_SL)
-        IF(ALLOCATED(R_vdw_SL))                     DEALLOCATE(R_vdw_SL)
-        IF(ALLOCATED(alpha_eff_SL))                 DEALLOCATE(alpha_eff_SL)  
+        IF(ALLOCATED(cfdm_eigenvectors))            DEALLOCATE(cfdm_eigenvectors)
         !----------------------------------------------------------------------------------------------------------------------------------
         RETURN
         !----------------------------------------------------------------------------------------------------------------------------------
@@ -1090,7 +899,150 @@ CONTAINS
     !--------------------------------------------------------------------------------------------------------------------------------------
 
     !--------------------------------------------------------------------------------------------------------------------------------------
-    SUBROUTINE get_alpha_omega_and_sgm(HF,C6_free,alpha_free,w,a_w,sgm_w)
+    SUBROUTINE supercell_get_info(atom_idx_SL, atom_idx, dis_i, dis_j, dis_k)
+        !----------------------------------------------------------------------------------------------------------------------------------
+        INTEGER, INTENT(IN)                  :: atom_idx_SL
+        INTEGER, INTENT(OUT)                 :: atom_idx
+        INTEGER, INTENT(OUT)                 :: dis_i
+        INTEGER, INTENT(OUT)                 :: dis_j
+        INTEGER, INTENT(OUT)                 :: dis_k
+        !----------------------------------------------------------------------------------------------------------------------------------
+        INTEGER                              :: quotient
+        !----------------------------------------------------------------------------------------------------------------------------------
+        
+        !----------------------------------------------------------------------------------------------------------------------------------
+        atom_idx = MOD(atom_idx_SL-1,n_atoms)+1
+        quotient = (atom_idx_SL-1)/n_atoms                            ! cell index for corresponding atom "i_atom_SL"
+        !----------------------------------------------------------------------------------------------------------------------------------
+        dis_i    = MOD(quotient,supercell(1))
+        quotient = quotient/supercell(1)
+        !----------------------------------------------------------------------------------------------------------------------------------
+        dis_j    = MOD(quotient,supercell(2))
+        quotient = quotient/supercell(2)
+        !----------------------------------------------------------------------------------------------------------------------------------
+        dis_k    = MOD(quotient,supercell(3))
+        quotient = quotient/supercell(3)
+        !----------------------------------------------------------------------------------------------------------------------------------
+        
+        !----------------------------------------------------------------------------------------------------------------------------------
+    END SUBROUTINE supercell_get_info
+    !--------------------------------------------------------------------------------------------------------------------------------------
+
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    FUNCTION cfdm_diag_block(rgb) RESULT(BCFDM)                     ! diagonal block of the cfdm matrix
+        !----------------------------------------------------------------------------------------------------------------------------------
+        INTEGER, INTENT(IN)                  :: rgb                 ! global index for atom 'row'
+        !----------------------------------------------------------------------------------------------------------------------------------
+        INTEGER                              :: img_i               ! cell index along i
+        INTEGER                              :: img_j               ! cell index along j
+        INTEGER                              :: img_k               ! cell index along k
+        REAL*8                               :: r12                 ! distance between two atoms
+        REAL*8                               :: CFDM_prefactor      ! CFDM prefactor
+        REAL*8                               :: Rvdw12              ! sum of two Rvdw for atom1 and atom2
+        REAL*8,              DIMENSION(3)    :: dxyz                ! displacement between two atoms
+        !----------------------------------------------------------------------------------------------------------------------------------
+        REAL*8,              DIMENSION(3,3)  :: BCFDM
+        !----------------------------------------------------------------------------------------------------------------------------------
+        INTEGER                              :: atom_idx
+        INTEGER                              :: dis_i
+        INTEGER                              :: dis_j
+        INTEGER                              :: dis_k
+        !----------------------------------------------------------------------------------------------------------------------------------
+        
+        CALL supercell_get_info(rgb, atom_idx, dis_i, dis_j, dis_k)
+        
+        !----------------------------------------------------------------------------------------------------------------------------------
+        BCFDM = 0.0D0
+        !----------------------------------------------------------------------------------------------------------------------------------
+        DO img_i = cfdmimage(1,1), cfdmimage(2,1)
+            DO img_j = cfdmimage(1,2), cfdmimage(2,2)
+                DO img_k = cfdmimage(1,3), cfdmimage(2,3)
+                    IF ((img_i .NE. 0) .OR. (img_j .NE. 0) .OR. (img_k .NE. 0)) THEN
+                        !------------------------------------------------------------------------------------------------------------------
+                        ! find the coordinate of images
+                        !------------------------------------------------------------------------------------------------------------------
+                        dxyz(:) = (0-img_i)*lattice_vector_SL(:,1) + (0-img_j)*lattice_vector_SL(:,2) + (0-img_k)*lattice_vector_SL(:,3)
+                        !------------------------------------------------------------------------------------------------------------------
+                        r12     = DSQRT(dxyz(1)*dxyz(1) + dxyz(2)*dxyz(2) + dxyz(3)*dxyz(3))
+                        Rvdw12  = 2.0D0*Rvdw_eff(atom_idx)
+                        !------------------------------------------------------------------------------------------------------------------
+                        CFDM_prefactor = omega_screened(atom_idx)*omega_screened(atom_idx) * alpha_eff(atom_idx)
+                        !------------------------------------------------------------------------------------------------------------------
+                        IF(r12 .LE. mbd_cfdm_dip_cutoff/bohr) BCFDM = BCFDM + lr_bare_dipole_tensor(dxyz,r12,Rvdw12) * CFDM_prefactor
+                        !------------------------------------------------------------------------------------------------------------------
+                    END IF
+                END DO
+            END DO
+        END DO
+        !----------------------------------------------------------------------------------------------------------------------------------
+        
+        !----------------------------------------------------------------------------------------------------------------------------------
+        BCFDM(1,1) = BCFDM(1,1) + omega_screened(atom_idx)*omega_screened(atom_idx)        ! JJ: 1/2 missing
+        BCFDM(2,2) = BCFDM(2,2) + omega_screened(atom_idx)*omega_screened(atom_idx)        !     kinetic term missing
+        BCFDM(3,3) = BCFDM(3,3) + omega_screened(atom_idx)*omega_screened(atom_idx)
+        !----------------------------------------------------------------------------------------------------------------------------------
+    END FUNCTION cfdm_diag_block
+    !--------------------------------------------------------------------------------------------------------------------------------------
+
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    FUNCTION cfdm_offdiag_block(rgb,cgb) RESULT(BCFDM)              ! diagonal block of the cfdm matrix
+        !----------------------------------------------------------------------------------------------------------------------------------
+        INTEGER, INTENT(IN)                  :: rgb                 ! global index for atom 'row'
+        INTEGER, INTENT(IN)                  :: cgb                 ! global index for atom 'col'
+        !----------------------------------------------------------------------------------------------------------------------------------
+        INTEGER                              :: img_i               ! cell index along i
+        INTEGER                              :: img_j               ! cell index along j
+        INTEGER                              :: img_k               ! cell index along k
+        REAL*8                               :: r12                 ! distance between two atoms
+        REAL*8                               :: CFDM_prefactor      ! CFDM prefactor
+        REAL*8                               :: Rvdw12              ! sum of two Rvdw for atom1 and atom2
+        REAL*8,              DIMENSION(3)    :: dxyz                ! displacement between two atoms
+        !----------------------------------------------------------------------------------------------------------------------------------
+        REAL*8,              DIMENSION(3,3)  :: BCFDM
+        !----------------------------------------------------------------------------------------------------------------------------------
+        INTEGER                              :: ratom_idx
+        INTEGER                              :: rdis_i
+        INTEGER                              :: rdis_j
+        INTEGER                              :: rdis_k
+        !----------------------------------------------------------------------------------------------------------------------------------
+        INTEGER                              :: catom_idx
+        INTEGER                              :: cdis_i
+        INTEGER                              :: cdis_j
+        INTEGER                              :: cdis_k
+        !----------------------------------------------------------------------------------------------------------------------------------
+        
+        CALL supercell_get_info(rgb, ratom_idx, rdis_i, rdis_j, rdis_k)
+        CALL supercell_get_info(cgb, catom_idx, cdis_i, cdis_j, cdis_k)
+        
+        !----------------------------------------------------------------------------------------------------------------------------------
+        BCFDM = 0.0D0
+        !----------------------------------------------------------------------------------------------------------------------------------
+        DO img_i = cfdmimage(1,1), cfdmimage(2,1)                 ! loop through the images of the col atom
+            DO img_j = cfdmimage(1,2), cfdmimage(2,2)
+                DO img_k = cfdmimage(1,3), cfdmimage(2,3)
+                    !------------------------------------------------------------------------------------------------------------------
+                    ! find the coordinate of images
+                    !------------------------------------------------------------------------------------------------------------------
+                    dxyz(:) = (coords(:,ratom_idx) - coords(:,catom_idx))                                                                       &
+                            + ((rdis_i-cdis_i)*lattice_vector(:,1) + (rdis_j-cdis_j)*lattice_vector(:,2) + (rdis_k-cdis_k)*lattice_vector(:,3)) &
+                            + ((0-img_i)*lattice_vector_SL(:,1)    + (0-img_j)*lattice_vector_SL(:,2)    + (0-img_k)*lattice_vector_SL(:,3))
+                    !------------------------------------------------------------------------------------------------------------------
+                    r12     = DSQRT(dxyz(1)*dxyz(1) + dxyz(2)*dxyz(2) + dxyz(3)*dxyz(3))
+                    Rvdw12  = Rvdw_eff(ratom_idx) + Rvdw_eff(catom_idx)
+                    !------------------------------------------------------------------------------------------------------------------
+                    CFDM_prefactor = omega_screened(ratom_idx)*omega_screened(catom_idx) * DSQRT(alpha_eff(ratom_idx)*alpha_eff(catom_idx))
+                    !------------------------------------------------------------------------------------------------------------------
+                    IF(r12 .LE. mbd_cfdm_dip_cutoff/bohr) BCFDM = BCFDM + lr_bare_dipole_tensor(dxyz,r12,Rvdw12) * CFDM_prefactor
+                    !------------------------------------------------------------------------------------------------------------------
+                END DO
+            END DO
+        END DO
+        !----------------------------------------------------------------------------------------------------------------------------------
+    END FUNCTION cfdm_offdiag_block
+    !--------------------------------------------------------------------------------------------------------------------------------------
+
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    SUBROUTINE get_alpha_and_sgm(HF,C6_free,alpha_free,w,a_w,sgm_w)
     !--------------------------------------------------------------------------------------------------------------------------------------
         IMPLICIT NONE
         !----------------------------------------------------------------------------------------------------------------------------------
@@ -1117,7 +1069,7 @@ CONTAINS
         
         RETURN
     !--------------------------------------------------------------------------------------------------------------------------------------
-    END SUBROUTINE get_alpha_omega_and_sgm
+    END SUBROUTINE get_alpha_and_sgm
     !--------------------------------------------------------------------------------------------------------------------------------------
 
     !--------------------------------------------------------------------------------------------------------------------------------------
@@ -1231,24 +1183,24 @@ CONTAINS
     SUBROUTINE get_scs_image()
         !----------------------------------------------------------------------------------------------------------------------------------
         IF(.NOT. mbd_scs_vacuum_axis(1)) THEN
-            scsimage(1,1) = -CEILING((mbd_scs_dip_cutoff/bohr) / SQRT(lattice_vector(1,1)**2 + lattice_vector(2,1)**2 + lattice_vector(3,1)**2))
-            scsimage(2,1) =  CEILING((mbd_scs_dip_cutoff/bohr) / SQRT(lattice_vector(1,1)**2 + lattice_vector(2,1)**2 + lattice_vector(3,1)**2))
+            scsimage(1,1) = -CEILING((mbd_scs_dip_cutoff/bohr) / DSQRT(lattice_vector(1,1)**2 + lattice_vector(2,1)**2 + lattice_vector(3,1)**2))
+            scsimage(2,1) =  CEILING((mbd_scs_dip_cutoff/bohr) / DSQRT(lattice_vector(1,1)**2 + lattice_vector(2,1)**2 + lattice_vector(3,1)**2))
         ELSE
             scsimage(1,1) = 0
             scsimage(2,1) = 0
         END IF 
         !----------------------------------------------------------------------------------------------------------------------------------
         IF(.NOT. mbd_scs_vacuum_axis(2)) THEN
-            scsimage(1,2) = -CEILING((mbd_scs_dip_cutoff/bohr) / SQRT(lattice_vector(1,2)**2 + lattice_vector(2,2)**2 + lattice_vector(3,2)**2))
-            scsimage(2,2) =  CEILING((mbd_scs_dip_cutoff/bohr) / SQRT(lattice_vector(1,2)**2 + lattice_vector(2,2)**2 + lattice_vector(3,2)**2))
+            scsimage(1,2) = -CEILING((mbd_scs_dip_cutoff/bohr) / DSQRT(lattice_vector(1,2)**2 + lattice_vector(2,2)**2 + lattice_vector(3,2)**2))
+            scsimage(2,2) =  CEILING((mbd_scs_dip_cutoff/bohr) / DSQRT(lattice_vector(1,2)**2 + lattice_vector(2,2)**2 + lattice_vector(3,2)**2))
         ELSE
             scsimage(1,2) = 0
             scsimage(2,2) = 0
         END IF 
         !----------------------------------------------------------------------------------------------------------------------------------
         IF(.NOT. mbd_scs_vacuum_axis(3)) THEN
-            scsimage(1,3) = -CEILING((mbd_scs_dip_cutoff/bohr) / SQRT(lattice_vector(1,3)**2 + lattice_vector(2,3)**2 + lattice_vector(3,3)**2))
-            scsimage(2,3) =  CEILING((mbd_scs_dip_cutoff/bohr) / SQRT(lattice_vector(1,3)**2 + lattice_vector(2,3)**2 + lattice_vector(3,3)**2))
+            scsimage(1,3) = -CEILING((mbd_scs_dip_cutoff/bohr) / DSQRT(lattice_vector(1,3)**2 + lattice_vector(2,3)**2 + lattice_vector(3,3)**2))
+            scsimage(2,3) =  CEILING((mbd_scs_dip_cutoff/bohr) / DSQRT(lattice_vector(1,3)**2 + lattice_vector(2,3)**2 + lattice_vector(3,3)**2))
         ELSE
             scsimage(1,3) = 0
             scsimage(2,3) = 0
@@ -1261,7 +1213,71 @@ CONTAINS
     !--------------------------------------------------------------------------------------------------------------------------------------
 
     !--------------------------------------------------------------------------------------------------------------------------------------
-    SUBROUTINE get_vdw_param(atom,C6, alpha, R0)
+    SUBROUTINE get_supercell()
+        !------------------------------------------------------------------------------------------------------------------------------
+        IF(.NOT. mbd_scs_vacuum_axis(1)) THEN
+            supercell(1) = CEILING((mbd_supercell_cutoff/bohr)/DSQRT(lattice_vector(1,1)**2 + lattice_vector(2,1)**2 +lattice_vector(3,1)**2))
+        ELSE
+            supercell(1) = 1
+        END IF
+        !------------------------------------------------------------------------------------------------------------------------------
+        IF(.NOT. mbd_scs_vacuum_axis(2)) THEN
+            supercell(2) = CEILING((mbd_supercell_cutoff/bohr)/DSQRT(lattice_vector(1,2)**2 + lattice_vector(2,2)**2 +lattice_vector(3,2)**2)) 
+        ELSE
+            supercell(2) = 1
+        END IF
+        !------------------------------------------------------------------------------------------------------------------------------
+        IF(.NOT. mbd_scs_vacuum_axis(3)) THEN
+            supercell(3) = CEILING((mbd_supercell_cutoff/bohr)/DSQRT(lattice_vector(1,3)**2 + lattice_vector(2,3)**2 +lattice_vector(3,3)**2)) 
+        ELSE
+            supercell(3) = 1
+        END IF
+        !------------------------------------------------------------------------------------------------------------------------------
+        IF (n_periodic .EQ. 0) supercell = 1
+        !----------------------------------------------------------------------------------------------------------------------------------
+        lattice_vector_SL(:,1)  = lattice_vector(:,1) * supercell(1)
+        lattice_vector_SL(:,2)  = lattice_vector(:,2) * supercell(2)
+        lattice_vector_SL(:,3)  = lattice_vector(:,3) * supercell(3)
+        !------------------------------------------------------------------------------------------------------------------------------
+        RETURN
+    END SUBROUTINE get_supercell
+    !--------------------------------------------------------------------------------------------------------------------------------------
+
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    SUBROUTINE get_cfdm_image()
+        !----------------------------------------------------------------------------------------------------------------------------------
+        IF(.NOT. mbd_scs_vacuum_axis(1)) THEN
+            cfdmimage(1,1) = -CEILING((mbd_cfdm_dip_cutoff/bohr) / DSQRT(lattice_vector_SL(1,1)**2 + lattice_vector_SL(2,1)**2 + lattice_vector_SL(3,1)**2))
+            cfdmimage(2,1) =  CEILING((mbd_cfdm_dip_cutoff/bohr) / DSQRT(lattice_vector_SL(1,1)**2 + lattice_vector_SL(2,1)**2 + lattice_vector_SL(3,1)**2))
+        ELSE
+            cfdmimage(1,1) = 0
+            cfdmimage(2,1) = 0
+        END IF 
+        !----------------------------------------------------------------------------------------------------------------------------------
+        IF(.NOT. mbd_scs_vacuum_axis(2)) THEN
+            cfdmimage(1,2) = -CEILING((mbd_cfdm_dip_cutoff/bohr) / DSQRT(lattice_vector_SL(1,2)**2 + lattice_vector_SL(2,2)**2 + lattice_vector_SL(3,2)**2))
+            cfdmimage(2,2) =  CEILING((mbd_cfdm_dip_cutoff/bohr) / DSQRT(lattice_vector_SL(1,2)**2 + lattice_vector_SL(2,2)**2 + lattice_vector_SL(3,2)**2))
+        ELSE
+            cfdmimage(1,2) = 0
+            cfdmimage(2,2) = 0
+        END IF 
+        !----------------------------------------------------------------------------------------------------------------------------------
+        IF(.NOT. mbd_scs_vacuum_axis(3)) THEN
+            cfdmimage(1,3) = -CEILING((mbd_cfdm_dip_cutoff/bohr) / DSQRT(lattice_vector_SL(1,3)**2 + lattice_vector_SL(2,3)**2 + lattice_vector_SL(3,3)**2))
+            cfdmimage(2,3) =  CEILING((mbd_cfdm_dip_cutoff/bohr) / DSQRT(lattice_vector_SL(1,3)**2 + lattice_vector_SL(2,3)**2 + lattice_vector_SL(3,3)**2))
+        ELSE
+            cfdmimage(1,3) = 0
+            cfdmimage(2,3) = 0
+        END IF 
+        !----------------------------------------------------------------------------------------------------------------------------------
+        IF (n_periodic .EQ. 0) cfdmimage = 0
+        !----------------------------------------------------------------------------------------------------------------------------------
+        RETURN
+    END SUBROUTINE get_cfdm_image
+    !--------------------------------------------------------------------------------------------------------------------------------------
+
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    SUBROUTINE get_vdw_param(atom, C6, alpha, R0)
         !----------------------------------------------------------------------------------------------------------------------------------
         ! Free-atom C6, polarizability and vdW radius
         !----------------------------------------------------------------------------------------------------------------------------------
