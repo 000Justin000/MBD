@@ -1169,31 +1169,35 @@ CONTAINS
     !--------------------------------------------------------------------------------------------------------------------------------------
     SUBROUTINE get_scs_image()
         !----------------------------------------------------------------------------------------------------------------------------------
-        IF(.NOT. mbd_scs_vacuum_axis(1)) THEN
-            scsimage(1,1) = -CEILING((mbd_scs_dip_cutoff/bohr) / DSQRT(lattice_vector(1,1)**2 + lattice_vector(2,1)**2 + lattice_vector(3,1)**2))
-            scsimage(2,1) =  CEILING((mbd_scs_dip_cutoff/bohr) / DSQRT(lattice_vector(1,1)**2 + lattice_vector(2,1)**2 + lattice_vector(3,1)**2))
-        ELSE
-            scsimage(1,1) = 0
-            scsimage(2,1) = 0
-        END IF 
+        scsimage = 0
         !----------------------------------------------------------------------------------------------------------------------------------
-        IF(.NOT. mbd_scs_vacuum_axis(2)) THEN
-            scsimage(1,2) = -CEILING((mbd_scs_dip_cutoff/bohr) / DSQRT(lattice_vector(1,2)**2 + lattice_vector(2,2)**2 + lattice_vector(3,2)**2))
-            scsimage(2,2) =  CEILING((mbd_scs_dip_cutoff/bohr) / DSQRT(lattice_vector(1,2)**2 + lattice_vector(2,2)**2 + lattice_vector(3,2)**2))
-        ELSE
-            scsimage(1,2) = 0
-            scsimage(2,2) = 0
-        END IF 
-        !----------------------------------------------------------------------------------------------------------------------------------
-        IF(.NOT. mbd_scs_vacuum_axis(3)) THEN
-            scsimage(1,3) = -CEILING((mbd_scs_dip_cutoff/bohr) / DSQRT(lattice_vector(1,3)**2 + lattice_vector(2,3)**2 + lattice_vector(3,3)**2))
-            scsimage(2,3) =  CEILING((mbd_scs_dip_cutoff/bohr) / DSQRT(lattice_vector(1,3)**2 + lattice_vector(2,3)**2 + lattice_vector(3,3)**2))
-        ELSE
-            scsimage(1,3) = 0
-            scsimage(2,3) = 0
-        END IF 
-        !----------------------------------------------------------------------------------------------------------------------------------
-        IF (n_periodic .EQ. 0) scsimage = 0
+        IF (n_periodic .NE. 0) THEN
+            !------------------------------------------------------------------------------------------------------------------------------
+            IF(.NOT. mbd_scs_vacuum_axis(1)) THEN
+                scsimage(1,1) = -CEILING((mbd_scs_dip_cutoff/bohr) / DSQRT(lattice_vector(1,1)**2 + lattice_vector(2,1)**2 + lattice_vector(3,1)**2))
+                scsimage(2,1) =  CEILING((mbd_scs_dip_cutoff/bohr) / DSQRT(lattice_vector(1,1)**2 + lattice_vector(2,1)**2 + lattice_vector(3,1)**2))
+            ELSE
+                scsimage(1,1) = 0
+                scsimage(2,1) = 0
+            END IF 
+            !------------------------------------------------------------------------------------------------------------------------------
+            IF(.NOT. mbd_scs_vacuum_axis(2)) THEN
+                scsimage(1,2) = -CEILING((mbd_scs_dip_cutoff/bohr) / DSQRT(lattice_vector(1,2)**2 + lattice_vector(2,2)**2 + lattice_vector(3,2)**2))
+                scsimage(2,2) =  CEILING((mbd_scs_dip_cutoff/bohr) / DSQRT(lattice_vector(1,2)**2 + lattice_vector(2,2)**2 + lattice_vector(3,2)**2))
+            ELSE
+                scsimage(1,2) = 0
+                scsimage(2,2) = 0
+            END IF 
+            !-----------------------------------------------------------------------------------------------------------------------------
+            IF(.NOT. mbd_scs_vacuum_axis(3)) THEN
+                scsimage(1,3) = -CEILING((mbd_scs_dip_cutoff/bohr) / DSQRT(lattice_vector(1,3)**2 + lattice_vector(2,3)**2 + lattice_vector(3,3)**2))
+                scsimage(2,3) =  CEILING((mbd_scs_dip_cutoff/bohr) / DSQRT(lattice_vector(1,3)**2 + lattice_vector(2,3)**2 + lattice_vector(3,3)**2))
+            ELSE
+                scsimage(1,3) = 0
+                scsimage(2,3) = 0
+            END IF 
+            !------------------------------------------------------------------------------------------------------------------------------
+        END IF
         !----------------------------------------------------------------------------------------------------------------------------------
         RETURN
     END SUBROUTINE get_scs_image
@@ -1201,31 +1205,35 @@ CONTAINS
 
     !--------------------------------------------------------------------------------------------------------------------------------------
     SUBROUTINE get_supercell()
-        !------------------------------------------------------------------------------------------------------------------------------
-        IF(.NOT. mbd_scs_vacuum_axis(1)) THEN
-            supercell(1) = CEILING((mbd_supercell_cutoff/bohr)/DSQRT(lattice_vector(1,1)**2 + lattice_vector(2,1)**2 +lattice_vector(3,1)**2))
-        ELSE
-            supercell(1) = 1
+        !----------------------------------------------------------------------------------------------------------------------------------
+        supercell = 1
+        !----------------------------------------------------------------------------------------------------------------------------------
+        IF (n_periodic .NE. 0) THEN
+            !------------------------------------------------------------------------------------------------------------------------------
+            IF(.NOT. mbd_scs_vacuum_axis(1)) THEN
+                supercell(1) = CEILING((mbd_supercell_cutoff/bohr)/DSQRT(lattice_vector(1,1)**2 + lattice_vector(2,1)**2 +lattice_vector(3,1)**2))
+            ELSE
+                supercell(1) = 1
+            END IF
+            !------------------------------------------------------------------------------------------------------------------------------
+            IF(.NOT. mbd_scs_vacuum_axis(2)) THEN
+                supercell(2) = CEILING((mbd_supercell_cutoff/bohr)/DSQRT(lattice_vector(1,2)**2 + lattice_vector(2,2)**2 +lattice_vector(3,2)**2)) 
+            ELSE
+                supercell(2) = 1
+            END IF
+            !------------------------------------------------------------------------------------------------------------------------------
+            IF(.NOT. mbd_scs_vacuum_axis(3)) THEN
+                supercell(3) = CEILING((mbd_supercell_cutoff/bohr)/DSQRT(lattice_vector(1,3)**2 + lattice_vector(2,3)**2 +lattice_vector(3,3)**2)) 
+            ELSE
+                supercell(3) = 1
+            END IF
+            !------------------------------------------------------------------------------------------------------------------------------
         END IF
-        !------------------------------------------------------------------------------------------------------------------------------
-        IF(.NOT. mbd_scs_vacuum_axis(2)) THEN
-            supercell(2) = CEILING((mbd_supercell_cutoff/bohr)/DSQRT(lattice_vector(1,2)**2 + lattice_vector(2,2)**2 +lattice_vector(3,2)**2)) 
-        ELSE
-            supercell(2) = 1
-        END IF
-        !------------------------------------------------------------------------------------------------------------------------------
-        IF(.NOT. mbd_scs_vacuum_axis(3)) THEN
-            supercell(3) = CEILING((mbd_supercell_cutoff/bohr)/DSQRT(lattice_vector(1,3)**2 + lattice_vector(2,3)**2 +lattice_vector(3,3)**2)) 
-        ELSE
-            supercell(3) = 1
-        END IF
-        !------------------------------------------------------------------------------------------------------------------------------
-        IF (n_periodic .EQ. 0) supercell = 1
         !----------------------------------------------------------------------------------------------------------------------------------
         lattice_vector_SL(:,1)  = lattice_vector(:,1) * supercell(1)
         lattice_vector_SL(:,2)  = lattice_vector(:,2) * supercell(2)
         lattice_vector_SL(:,3)  = lattice_vector(:,3) * supercell(3)
-        !------------------------------------------------------------------------------------------------------------------------------
+        !----------------------------------------------------------------------------------------------------------------------------------
         RETURN
     END SUBROUTINE get_supercell
     !--------------------------------------------------------------------------------------------------------------------------------------
@@ -1233,31 +1241,35 @@ CONTAINS
     !--------------------------------------------------------------------------------------------------------------------------------------
     SUBROUTINE get_cfdm_image()
         !----------------------------------------------------------------------------------------------------------------------------------
-        IF(.NOT. mbd_scs_vacuum_axis(1)) THEN
-            cfdmimage(1,1) = -CEILING((mbd_cfdm_dip_cutoff/bohr) / DSQRT(lattice_vector_SL(1,1)**2 + lattice_vector_SL(2,1)**2 + lattice_vector_SL(3,1)**2))
-            cfdmimage(2,1) =  CEILING((mbd_cfdm_dip_cutoff/bohr) / DSQRT(lattice_vector_SL(1,1)**2 + lattice_vector_SL(2,1)**2 + lattice_vector_SL(3,1)**2))
-        ELSE
-            cfdmimage(1,1) = 0
-            cfdmimage(2,1) = 0
-        END IF 
+        cfdmimage = 0
         !----------------------------------------------------------------------------------------------------------------------------------
-        IF(.NOT. mbd_scs_vacuum_axis(2)) THEN
-            cfdmimage(1,2) = -CEILING((mbd_cfdm_dip_cutoff/bohr) / DSQRT(lattice_vector_SL(1,2)**2 + lattice_vector_SL(2,2)**2 + lattice_vector_SL(3,2)**2))
-            cfdmimage(2,2) =  CEILING((mbd_cfdm_dip_cutoff/bohr) / DSQRT(lattice_vector_SL(1,2)**2 + lattice_vector_SL(2,2)**2 + lattice_vector_SL(3,2)**2))
-        ELSE
-            cfdmimage(1,2) = 0
-            cfdmimage(2,2) = 0
-        END IF 
-        !----------------------------------------------------------------------------------------------------------------------------------
-        IF(.NOT. mbd_scs_vacuum_axis(3)) THEN
-            cfdmimage(1,3) = -CEILING((mbd_cfdm_dip_cutoff/bohr) / DSQRT(lattice_vector_SL(1,3)**2 + lattice_vector_SL(2,3)**2 + lattice_vector_SL(3,3)**2))
-            cfdmimage(2,3) =  CEILING((mbd_cfdm_dip_cutoff/bohr) / DSQRT(lattice_vector_SL(1,3)**2 + lattice_vector_SL(2,3)**2 + lattice_vector_SL(3,3)**2))
-        ELSE
-            cfdmimage(1,3) = 0
-            cfdmimage(2,3) = 0
-        END IF 
-        !----------------------------------------------------------------------------------------------------------------------------------
-        IF (n_periodic .EQ. 0) cfdmimage = 0
+        IF (n_periodic .NE. 0) THEN
+            !------------------------------------------------------------------------------------------------------------------------------
+            IF(.NOT. mbd_scs_vacuum_axis(1)) THEN
+                cfdmimage(1,1) = -CEILING((mbd_cfdm_dip_cutoff/bohr) / DSQRT(lattice_vector_SL(1,1)**2 + lattice_vector_SL(2,1)**2 + lattice_vector_SL(3,1)**2))
+                cfdmimage(2,1) =  CEILING((mbd_cfdm_dip_cutoff/bohr) / DSQRT(lattice_vector_SL(1,1)**2 + lattice_vector_SL(2,1)**2 + lattice_vector_SL(3,1)**2))
+            ELSE
+                cfdmimage(1,1) = 0
+                cfdmimage(2,1) = 0
+            END IF 
+            !----------------------------------------------------------------------------------------------------------------------------------
+            IF(.NOT. mbd_scs_vacuum_axis(2)) THEN
+                cfdmimage(1,2) = -CEILING((mbd_cfdm_dip_cutoff/bohr) / DSQRT(lattice_vector_SL(1,2)**2 + lattice_vector_SL(2,2)**2 + lattice_vector_SL(3,2)**2))
+                cfdmimage(2,2) =  CEILING((mbd_cfdm_dip_cutoff/bohr) / DSQRT(lattice_vector_SL(1,2)**2 + lattice_vector_SL(2,2)**2 + lattice_vector_SL(3,2)**2))
+            ELSE
+                cfdmimage(1,2) = 0
+                cfdmimage(2,2) = 0
+            END IF 
+            !----------------------------------------------------------------------------------------------------------------------------------
+            IF(.NOT. mbd_scs_vacuum_axis(3)) THEN
+                cfdmimage(1,3) = -CEILING((mbd_cfdm_dip_cutoff/bohr) / DSQRT(lattice_vector_SL(1,3)**2 + lattice_vector_SL(2,3)**2 + lattice_vector_SL(3,3)**2))
+                cfdmimage(2,3) =  CEILING((mbd_cfdm_dip_cutoff/bohr) / DSQRT(lattice_vector_SL(1,3)**2 + lattice_vector_SL(2,3)**2 + lattice_vector_SL(3,3)**2))
+            ELSE
+                cfdmimage(1,3) = 0
+                cfdmimage(2,3) = 0
+            END IF 
+            !----------------------------------------------------------------------------------------------------------------------------------
+        END IF
         !----------------------------------------------------------------------------------------------------------------------------------
         RETURN
     END SUBROUTINE get_cfdm_image
