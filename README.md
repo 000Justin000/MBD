@@ -35,8 +35,8 @@ FC, LD and MKL_ROOT flag to to specify fortran complier and
 (SCA)LAPACK/BLAS library. 
 
 example:-  
------------------------Makefile.in-------------------------
-FC=mpiifort
+-----------------------Makefile.in-------------------------  
+FC=mpiifort  
 MKL_ROOT=/opt/intel/composer_xe_2013.2.146/mkl/lib/intel64
 
 After this, you should be able to generate the `pmbd.x` 
