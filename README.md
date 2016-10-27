@@ -105,20 +105,19 @@ mbd_cfdm_dip_cutoff (value)
 Radius used to integrate dipole field in periodic MBD calculation (internal default=100.0 Angstrom)
 
 mbd_scs_dip_cutoff (value)  
-Radius used to integrate dipole field in periodic SCS calculation (internal default=100.0 Angstrom)
+Radius used to integrate dipole field in periodic SCS calculation (internal default=100.0 Angstrom)  
 NOTE: Our numerical tests suggest that C6 coefficient should be converged by tuning the mbd_scs_dip_cutoff parameter.
 This is especially important when studying low-dimensional systems. For example for graphene the C6 coefficient
 is of the order 140 hartree·bohr6 which requires a 700 Angstrom cutoff.
 
 mbd_supercell_cutoff (value)  
-Radius used to construct the supercell in periodic MBD calculations. 
-(default = 25 Angstrom) NOTE: The convergence wrt the value of
-mbd_supercell_cutoff must be carefully tested for periodic systems with low
-symmetry.
+Radius used to construct the supercell in periodic MBD calculations.  
+(default = 25 Angstrom) NOTE: The convergence wrt the value of mbd_supercell_cutoff must be
+carefully tested for periodic systems with low symmetry.
 
 mbd_scs_vacuum_axis (flag) (flag) (flag)  
-This keyword specifies directions to be treated as vacuum in the case of low dimensional systems.
-Default: No vacuum, i.e. mbd_scs_vacuum_axis .false. .false. .false.
+This keyword specifies directions to be treated as vacuum in the case of low dimensional systems.  
+Default: No vacuum, i.e. mbd_scs_vacuum_axis .false. .false. .false.  
 For example in the case of periodic slab along XY directions the keyword
 mbd_scs_vacuum_axis .false. .false. .true. is needed to specify Z as
 the vacuum direction in MBD/SCS calculations.
