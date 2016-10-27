@@ -54,7 +54,6 @@ MODULE  UTILS
     INTEGER                                     ::   iproc                        ! process id
     INTEGER                                     ::   ierr                         ! error handle
     INTEGER                                     ::   n_atoms                      ! number of atoms
-    INTEGER                                     ::   n_atoms_SL                   ! number of atoms in supercell
     !--------------------------------------------------------------------------------------------------------------------------------------
     ! scalapack
     !--------------------------------------------------------------------------------------------------------------------------------------
@@ -669,6 +668,7 @@ CONTAINS
         INTEGER                                :: clb                   ! local block col index
         INTEGER                                :: rgb                   ! global block row index
         INTEGER                                :: cgb                   ! global block col index
+        INTEGER                                :: bsize_SL              ! block size
         !----------------------------------------------------------------------------------------------------------------------------------
         INTEGER                                :: DESC_A(9)
         INTEGER                                :: DESC_Z(9)
@@ -693,28 +693,28 @@ CONTAINS
         SL_i = supercell(1)
         SL_j = supercell(2)
         SL_k = supercell(3)
-        !------------------------------------------------------------------------------------------------------------------------------
-        n_atoms_SL = n_atoms * SL_i * SL_j * SL_k
+        !----------------------------------------------------------------------------------------------------------------------------------
+        bsize_SL = 3*SL_i*SL_j*SL_k
         !------------------------------------------------------------------------------------------------------------------------------
         WRITE(info_str,'(2X,A,i3,A,i3,A,i3,A)') "| Creating super cell of dimension",  SL_i," X ", SL_j," X ", SL_k, " in MBD calculation" 
         CALL output_string(info_str)
-        WRITE(info_str,'(2x,"| containing", I6,A)') n_atoms_SL, "  atom"
+        WRITE(info_str,'(2x,"| containing", I6,A)') n_atoms*SL_i*SL_j*SL_k, "  atom"
         CALL output_string(info_str)
         !------------------------------------------------------------------------------------------------------------------------------
         
         !------------------------------------------------------------------------------------------------------------------------------
-        loc_row_SL = INT(CEILING(DBLE(n_atoms_SL)/DBLE(nprow) - eps) + eps)
-        loc_col_SL = INT(CEILING(DBLE(n_atoms_SL)/DBLE(npcol) - eps) + eps)
+        loc_row = INT(CEILING(DBLE(n_atoms)/DBLE(nprow) - eps) + eps)
+        loc_col = INT(CEILING(DBLE(n_atoms)/DBLE(npcol) - eps) + eps)
         !------------------------------------------------------------------------------------------------------------------------------
         
         !------------------------------------------------------------------------------------------------------------------------------
         ! allocation
         !------------------------------------------------------------------------------------------------------------------------------
-        lwork = 10*3*n_atoms_SL
+        lwork = 30*n_atoms*bsize_SL
         !------------------------------------------------------------------------------------------------------------------------------
-        IF(.NOT. ALLOCATED(cfdm_hamiltonian))             ALLOCATE(cfdm_hamiltonian (3*loc_row_SL,3*loc_col_SL))
-        IF(.NOT. ALLOCATED(cfdm_eigenvalues))             ALLOCATE(cfdm_eigenvalues (3*n_atoms_SL))
-        IF(.NOT. ALLOCATED(cfdm_eigenvectors))            ALLOCATE(cfdm_eigenvectors(3*loc_row_SL,3*loc_col_SL))
+        IF(.NOT. ALLOCATED(cfdm_hamiltonian))             ALLOCATE(cfdm_hamiltonian (loc_row*bsize_SL,loc_col*bsize_SL))
+        IF(.NOT. ALLOCATED(cfdm_eigenvalues))             ALLOCATE(cfdm_eigenvalues (n_atoms*bsize_SL))
+        IF(.NOT. ALLOCATED(cfdm_eigenvectors))            ALLOCATE(cfdm_eigenvectors(loc_row*bsize_SL,loc_col*bsize_SL))
         !------------------------------------------------------------------------------------------------------------------------------
         IF(.NOT. ALLOCATED(work))                         ALLOCATE(work(lwork))
         !------------------------------------------------------------------------------------------------------------------------------
@@ -732,20 +732,20 @@ CONTAINS
         !----------------------------------------------------------------------------------------------------------------------------------
         rlb = 0
         !----------------------------------------------------------------------------------------------------------------------------------
-        DO rgb = (iprow+1), n_atoms_SL, nprow
+        DO rgb = (iprow+1), n_atoms, nprow
             !------------------------------------------------------------------------------------------------------------------------------
             rlb = rlb + 1
             !------------------------------------------------------------------------------------------------------------------------------
             clb = 0
             !------------------------------------------------------------------------------------------------------------------------------
-            DO cgb = (ipcol+1), n_atoms_SL, npcol
+            DO cgb = (ipcol+1), n_atoms, npcol
                 !--------------------------------------------------------------------------------------------------------------------------
                 clb = clb + 1
                 !--------------------------------------------------------------------------------------------------------------------------
                 IF (rgb .EQ. cgb) THEN
-                    cfdm_hamiltonian((rlb-1)*3+1:(rlb*3), (clb-1)*3+1:(clb*3)) = cfdm_diag_block(rgb)
+                    cfdm_hamiltonian((rlb-1)*bsize_SL+1:(rlb*bsize_SL), (clb-1)*bsize_SL+1:(clb*bsize_SL)) = supercell_diag_block(rgb,SL_i,SL_j,SL_k)
                 ELSE IF (rgb .GT. cgb) THEN
-                    cfdm_hamiltonian((rlb-1)*3+1:(rlb*3), (clb-1)*3+1:(clb*3)) = cfdm_offdiag_block(rgb, cgb)
+                    cfdm_hamiltonian((rlb-1)*bsize_SL+1:(rlb*bsize_SL), (clb-1)*bsize_SL+1:(clb*bsize_SL)) = supercell_offdiag_block(rgb,cgb,SL_i,SL_j,SL_k)
                 END IF
                 !--------------------------------------------------------------------------------------------------------------------------
             END DO
@@ -758,28 +758,27 @@ CONTAINS
         !----------------------------------------------------------------------------------------------------------------------------------
         DESC_A(1) = 1
         DESC_A(2) = ICONTXT
-        DESC_A(3) = 3*n_atoms_SL
-        DESC_A(4) = 3*n_atoms_SL
-        DESC_A(5) = 3
-        DESC_A(6) = 3
+        DESC_A(3) = n_atoms*bsize_SL
+        DESC_A(4) = n_atoms*bsize_SL
+        DESC_A(5) = bsize_SL
+        DESC_A(6) = bsize_SL
         DESC_A(7) = 0
         DESC_A(8) = 0
-        DESC_A(9) = 3*loc_row_SL
+        DESC_A(9) = loc_row*bsize_SL
         !----------------------------------------------------------------------------------------------------------------------------------
         DESC_Z(1) = 1
         DESC_Z(2) = ICONTXT
-        DESC_Z(3) = 3*n_atoms_SL
-        DESC_Z(4) = 3*n_atoms_SL
-        DESC_Z(5) = 3
-        DESC_Z(6) = 3
+        DESC_Z(3) = n_atoms*bsize_SL
+        DESC_Z(4) = n_atoms*bsize_SL
+        DESC_Z(5) = bsize_SL
+        DESC_Z(6) = bsize_SL
         DESC_Z(7) = 0
         DESC_Z(8) = 0
-        DESC_Z(9) = 3*loc_row_SL
+        DESC_Z(9) = loc_row*bsize_SL
         !----------------------------------------------------------------------------------------------------------------------------------
-        lwork = 100000
         info  = 0
         !----------------------------------------------------------------------------------------------------------------------------------
-        CALL PDSYEV('N', 'L', 3*n_atoms_SL, cfdm_hamiltonian, 1, 1, DESC_A, cfdm_eigenvalues, cfdm_eigenvectors, 1, 1, DESC_Z, work, lwork, info)
+        CALL PDSYEV('N', 'L', n_atoms*bsize_SL, cfdm_hamiltonian, 1, 1, DESC_A, cfdm_eigenvalues, cfdm_eigenvectors, 1, 1, DESC_Z, work, lwork, info)
         !----------------------------------------------------------------------------------------------------------------------------------
         
         !----------------------------------------------------------------------------------------------------------------------------------
@@ -794,7 +793,7 @@ CONTAINS
                 E_nonint = E_nonint + 3*omega_screened(i_atom)
             END DO
             
-            DO i_atom =1,3*n_atoms_SL
+            DO i_atom =1,n_atoms*bsize_SL
                 IF(cfdm_eigenvalues(i_atom) .GE. 0.0D0) THEN
                     E_int = E_int + DSQRT(cfdm_eigenvalues(i_atom))
                 ELSE
@@ -827,33 +826,218 @@ CONTAINS
     !--------------------------------------------------------------------------------------------------------------------------------------
 
     !--------------------------------------------------------------------------------------------------------------------------------------
-    SUBROUTINE supercell_get_info(atom_idx_SL, atom_idx, dis_i, dis_j, dis_k)
+    FUNCTION supercell_diag_block(rgb,SL_i,SL_j,SL_k) RESULT(BSC)
         !----------------------------------------------------------------------------------------------------------------------------------
-        INTEGER, INTENT(IN)                  :: atom_idx_SL
-        INTEGER, INTENT(OUT)                 :: atom_idx
-        INTEGER, INTENT(OUT)                 :: dis_i
-        INTEGER, INTENT(OUT)                 :: dis_j
-        INTEGER, INTENT(OUT)                 :: dis_k
+        INTEGER, INTENT(IN)                                         :: rgb                     ! global index for atom 'row'
         !----------------------------------------------------------------------------------------------------------------------------------
-        INTEGER                              :: quotient
+        INTEGER                                                     :: SL_i                    ! supercell size along i
+        INTEGER                                                     :: SL_j                    ! supercell size along j
+        INTEGER                                                     :: SL_k                    ! supercell size along k
+        !----------------------------------------------------------------------------------------------------------------------------------
+        INTEGER                                                     :: ratom_idx               ! atom index in single cell for atom 'row'
+        INTEGER                                                     :: catom_idx               ! atom index in single cell for atom 'row'
+        !----------------------------------------------------------------------------------------------------------------------------------
+        INTEGER                                                     :: rdis_i                  ! cell displacement along i for atom 'row'
+        INTEGER                                                     :: rdis_j                  ! cell displacement along j for atom 'row'
+        INTEGER                                                     :: rdis_k                  ! cell displacement along k for atom 'row'
+        INTEGER                                                     :: rdis                    ! cell displacement for atom 'row'
+        !----------------------------------------------------------------------------------------------------------------------------------
+        INTEGER                                                     :: cdis_i                  ! cell displacement along i for atom 'col'
+        INTEGER                                                     :: cdis_j                  ! cell displacement along j for atom 'col'
+        INTEGER                                                     :: cdis_k                  ! cell displacement along k for atom 'col'
+        INTEGER                                                     :: cdis                    ! cell displacement for atom 'col'
+        !----------------------------------------------------------------------------------------------------------------------------------
+        REAL*8,  DIMENSION(3*SL_i*SL_j*SL_k,3*SL_i*SL_j*SL_k)       :: BSC
         !----------------------------------------------------------------------------------------------------------------------------------
         
         !----------------------------------------------------------------------------------------------------------------------------------
-        atom_idx = MOD(atom_idx_SL-1,n_atoms)+1
-        quotient = (atom_idx_SL-1)/n_atoms                            ! cell index for corresponding atom "i_atom_SL"
+        ratom_idx = rgb
+        catom_idx = rgb
         !----------------------------------------------------------------------------------------------------------------------------------
-        dis_i    = MOD(quotient,supercell(1))
-        quotient = quotient/supercell(1)
+        DO rdis_i=0,SL_i-1
+            DO rdis_j=0,SL_j-1
+                DO rdis_k=0,SL_k-1
+                    !----------------------------------------------------------------------------------------------------------------------
+                    rdis = rdis_k*SL_j*SL_i + rdis_j*SL_i + rdis_i
+                    !----------------------------------------------------------------------------------------------------------------------
+                    DO cdis_i=0,SL_i-1
+                        DO cdis_j=0,SL_j-1
+                            DO cdis_k=0,SL_k-1
+                                !----------------------------------------------------------------------------------------------------------
+                                cdis = cdis_k*SL_j*SL_i + cdis_j*SL_i + cdis_i
+                                !----------------------------------------------------------------------------------------------------------
+                                IF ((rdis_i .EQ. cdis_i) .AND. (rdis_j .EQ. cdis_j) .AND. (rdis_k .EQ. cdis_k)) THEN
+                                    BSC(rdis*3+1:rdis*3+3, cdis*3+1:cdis*3+3) = cfdm_diag_block(ratom_idx)
+                                ELSE
+                                    BSC(rdis*3+1:rdis*3+3, cdis*3+1:cdis*3+3) = cfdm_offdiag_block(ratom_idx,rdis_i,rdis_j,rdis_k,&
+                                                                                                   catom_idx,cdis_i,cdis_j,cdis_k)
+                                END IF
+                                !----------------------------------------------------------------------------------------------------------
+                            END DO
+                        END DO
+                    END DO
+                    !----------------------------------------------------------------------------------------------------------------------
+                END DO
+            END DO
+        END DO
         !----------------------------------------------------------------------------------------------------------------------------------
-        dis_j    = MOD(quotient,supercell(2))
-        quotient = quotient/supercell(2)
+    END FUNCTION supercell_diag_block
+    !--------------------------------------------------------------------------------------------------------------------------------------
+
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    FUNCTION supercell_offdiag_block(rgb,cgb,SL_i,SL_j,SL_k) RESULT(BSC)
         !----------------------------------------------------------------------------------------------------------------------------------
-        dis_k    = MOD(quotient,supercell(3))
-        quotient = quotient/supercell(3)
+        INTEGER, INTENT(IN)                                         :: rgb                     ! global index for atom 'row'
+        INTEGER, INTENT(IN)                                         :: cgb                     ! global index for atom 'col'
+        !----------------------------------------------------------------------------------------------------------------------------------
+        INTEGER                                                     :: SL_i                    ! supercell size along i
+        INTEGER                                                     :: SL_j                    ! supercell size along j
+        INTEGER                                                     :: SL_k                    ! supercell size along k
+        !----------------------------------------------------------------------------------------------------------------------------------
+        INTEGER                                                     :: ratom_idx               ! atom index in single cell for atom 'row'
+        INTEGER                                                     :: catom_idx               ! atom index in single cell for atom 'col'
+        !----------------------------------------------------------------------------------------------------------------------------------
+        INTEGER                                                     :: rdis_i                  ! cell displacement along i for atom 'row'
+        INTEGER                                                     :: rdis_j                  ! cell displacement along j for atom 'row'
+        INTEGER                                                     :: rdis_k                  ! cell displacement along k for atom 'row'
+        INTEGER                                                     :: rdis                    ! cell displacement for atom 'row'
+        !----------------------------------------------------------------------------------------------------------------------------------
+        INTEGER                                                     :: cdis_i                  ! cell displacement along i for atom 'col'
+        INTEGER                                                     :: cdis_j                  ! cell displacement along j for atom 'col'
+        INTEGER                                                     :: cdis_k                  ! cell displacement along k for atom 'col'
+        INTEGER                                                     :: cdis                    ! cell displacement for atom 'col'
+        !----------------------------------------------------------------------------------------------------------------------------------
+        REAL*8,  DIMENSION(3*SL_i*SL_j*SL_k,3*SL_i*SL_j*SL_k)       :: BSC
         !----------------------------------------------------------------------------------------------------------------------------------
         
         !----------------------------------------------------------------------------------------------------------------------------------
-    END SUBROUTINE supercell_get_info
+        ratom_idx = rgb
+        catom_idx = cgb
+        !----------------------------------------------------------------------------------------------------------------------------------
+        DO rdis_i=0,SL_i-1
+            DO rdis_j=0,SL_j-1
+                DO rdis_k=0,SL_k-1
+                    !----------------------------------------------------------------------------------------------------------------------
+                    rdis = rdis_k*SL_j*SL_i + rdis_j*SL_i + rdis_i
+                    !----------------------------------------------------------------------------------------------------------------------
+                    DO cdis_i=0,SL_i-1
+                        DO cdis_j=0,SL_j-1
+                            DO cdis_k=0,SL_k-1
+                                !----------------------------------------------------------------------------------------------------------
+                                cdis = cdis_k*SL_j*SL_i + cdis_j*SL_i + cdis_i
+                                !----------------------------------------------------------------------------------------------------------
+                                BSC(rdis*3+1:rdis*3+3, cdis*3+1:cdis*3+3) = cfdm_offdiag_block(ratom_idx,rdis_i,rdis_j,rdis_k,&
+                                                                                               catom_idx,cdis_i,cdis_j,cdis_k)
+                                !----------------------------------------------------------------------------------------------------------
+                            END DO
+                        END DO
+                    END DO
+                    !----------------------------------------------------------------------------------------------------------------------
+                END DO
+            END DO
+        END DO
+        !----------------------------------------------------------------------------------------------------------------------------------
+    END FUNCTION supercell_offdiag_block
+    !--------------------------------------------------------------------------------------------------------------------------------------
+
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    FUNCTION cfdm_diag_block(ratom_idx) RESULT(BCFDM)               ! diagonal block of the cfdm matrix
+        !----------------------------------------------------------------------------------------------------------------------------------
+        INTEGER, INTENT(IN)                  :: ratom_idx           ! atom idx for atom 'row'
+        !----------------------------------------------------------------------------------------------------------------------------------
+        INTEGER                              :: img_i               ! cell index along i
+        INTEGER                              :: img_j               ! cell index along j
+        INTEGER                              :: img_k               ! cell index along k
+        REAL*8                               :: r12                 ! distance between two atoms
+        REAL*8                               :: CFDM_prefactor      ! CFDM prefactor
+        REAL*8                               :: Rvdw12              ! sum of two Rvdw for atom1 and atom2
+        REAL*8,              DIMENSION(3)    :: dxyz                ! displacement between two atoms
+        !----------------------------------------------------------------------------------------------------------------------------------
+        REAL*8,              DIMENSION(3,3)  :: BCFDM
+        !----------------------------------------------------------------------------------------------------------------------------------
+        
+        !----------------------------------------------------------------------------------------------------------------------------------
+        BCFDM = 0.0D0
+        !----------------------------------------------------------------------------------------------------------------------------------
+        DO img_i = cfdmimage(1,1), cfdmimage(2,1)
+            DO img_j = cfdmimage(1,2), cfdmimage(2,2)
+                DO img_k = cfdmimage(1,3), cfdmimage(2,3)
+                    IF ((img_i .NE. 0) .OR. (img_j .NE. 0) .OR. (img_k .NE. 0)) THEN
+                        !------------------------------------------------------------------------------------------------------------------
+                        ! find the coordinate of images
+                        !------------------------------------------------------------------------------------------------------------------
+                        dxyz(:) = (0-img_i)*lattice_vector_SL(:,1) + (0-img_j)*lattice_vector_SL(:,2) + (0-img_k)*lattice_vector_SL(:,3)
+                        !------------------------------------------------------------------------------------------------------------------
+                        r12     = DSQRT(dxyz(1)*dxyz(1) + dxyz(2)*dxyz(2) + dxyz(3)*dxyz(3))
+                        Rvdw12  = 2.0D0*Rvdw_eff(ratom_idx)
+                        !------------------------------------------------------------------------------------------------------------------
+                        CFDM_prefactor = omega_screened(ratom_idx)*omega_screened(ratom_idx) * alpha_eff(ratom_idx)
+                        !------------------------------------------------------------------------------------------------------------------
+                        IF(r12 .LE. mbd_cfdm_dip_cutoff/bohr) BCFDM = BCFDM + lr_bare_dipole_tensor(dxyz,r12,Rvdw12) * CFDM_prefactor
+                        !------------------------------------------------------------------------------------------------------------------
+                    END IF
+                END DO
+            END DO
+        END DO
+        !----------------------------------------------------------------------------------------------------------------------------------
+        
+        !----------------------------------------------------------------------------------------------------------------------------------
+        BCFDM(1,1) = BCFDM(1,1) + omega_screened(ratom_idx)*omega_screened(ratom_idx)        ! JJ: 1/2 missing
+        BCFDM(2,2) = BCFDM(2,2) + omega_screened(ratom_idx)*omega_screened(ratom_idx)        !     kinetic term missing
+        BCFDM(3,3) = BCFDM(3,3) + omega_screened(ratom_idx)*omega_screened(ratom_idx)
+        !----------------------------------------------------------------------------------------------------------------------------------
+    END FUNCTION cfdm_diag_block
+    !--------------------------------------------------------------------------------------------------------------------------------------
+
+    !--------------------------------------------------------------------------------------------------------------------------------------
+    FUNCTION cfdm_offdiag_block(ratom_idx,rdis_i,rdis_j,rdis_k,catom_idx,cdis_i,cdis_j,cdis_k) RESULT(BCFDM)
+        !----------------------------------------------------------------------------------------------------------------------------------
+        INTEGER                              :: ratom_idx
+        INTEGER                              :: rdis_i
+        INTEGER                              :: rdis_j
+        INTEGER                              :: rdis_k
+        !----------------------------------------------------------------------------------------------------------------------------------
+        INTEGER                              :: catom_idx
+        INTEGER                              :: cdis_i
+        INTEGER                              :: cdis_j
+        INTEGER                              :: cdis_k
+        !----------------------------------------------------------------------------------------------------------------------------------
+        INTEGER                              :: img_i               ! cell index along i
+        INTEGER                              :: img_j               ! cell index along j
+        INTEGER                              :: img_k               ! cell index along k
+        REAL*8                               :: r12                 ! distance between two atoms
+        REAL*8                               :: CFDM_prefactor      ! CFDM prefactor
+        REAL*8                               :: Rvdw12              ! sum of two Rvdw for atom1 and atom2
+        REAL*8,              DIMENSION(3)    :: dxyz                ! displacement between two atoms
+        !----------------------------------------------------------------------------------------------------------------------------------
+        REAL*8,              DIMENSION(3,3)  :: BCFDM
+        !----------------------------------------------------------------------------------------------------------------------------------
+        
+        !----------------------------------------------------------------------------------------------------------------------------------
+        BCFDM = 0.0D0
+        !----------------------------------------------------------------------------------------------------------------------------------
+        DO img_i = cfdmimage(1,1), cfdmimage(2,1)                 ! loop through the images of the col atom
+            DO img_j = cfdmimage(1,2), cfdmimage(2,2)
+                DO img_k = cfdmimage(1,3), cfdmimage(2,3)
+                    !------------------------------------------------------------------------------------------------------------------
+                    ! find the coordinate of images
+                    !------------------------------------------------------------------------------------------------------------------
+                    dxyz(:) = (coords(:,ratom_idx) - coords(:,catom_idx))                                                                       &
+                            + ((rdis_i-cdis_i)*lattice_vector(:,1) + (rdis_j-cdis_j)*lattice_vector(:,2) + (rdis_k-cdis_k)*lattice_vector(:,3)) &
+                            + ((0-img_i)*lattice_vector_SL(:,1)    + (0-img_j)*lattice_vector_SL(:,2)    + (0-img_k)*lattice_vector_SL(:,3))
+                    !------------------------------------------------------------------------------------------------------------------
+                    r12     = DSQRT(dxyz(1)*dxyz(1) + dxyz(2)*dxyz(2) + dxyz(3)*dxyz(3))
+                    Rvdw12  = Rvdw_eff(ratom_idx) + Rvdw_eff(catom_idx)
+                    !------------------------------------------------------------------------------------------------------------------
+                    CFDM_prefactor = omega_screened(ratom_idx)*omega_screened(catom_idx) * DSQRT(alpha_eff(ratom_idx)*alpha_eff(catom_idx))
+                    !------------------------------------------------------------------------------------------------------------------
+                    IF(r12 .LE. mbd_cfdm_dip_cutoff/bohr) BCFDM = BCFDM + lr_bare_dipole_tensor(dxyz,r12,Rvdw12) * CFDM_prefactor
+                    !------------------------------------------------------------------------------------------------------------------
+                END DO
+            END DO
+        END DO
+        !----------------------------------------------------------------------------------------------------------------------------------
+    END FUNCTION cfdm_offdiag_block
     !--------------------------------------------------------------------------------------------------------------------------------------
 
     !--------------------------------------------------------------------------------------------------------------------------------------
@@ -913,119 +1097,6 @@ CONTAINS
         !----------------------------------------------------------------------------------------------------------------------------------
         RETURN
     END FUNCTION lr_bare_dipole_tensor
-    !--------------------------------------------------------------------------------------------------------------------------------------
-
-    !--------------------------------------------------------------------------------------------------------------------------------------
-    FUNCTION cfdm_diag_block(rgb) RESULT(BCFDM)                     ! diagonal block of the cfdm matrix
-        !----------------------------------------------------------------------------------------------------------------------------------
-        INTEGER, INTENT(IN)                  :: rgb                 ! global index for atom 'row'
-        !----------------------------------------------------------------------------------------------------------------------------------
-        INTEGER                              :: img_i               ! cell index along i
-        INTEGER                              :: img_j               ! cell index along j
-        INTEGER                              :: img_k               ! cell index along k
-        REAL*8                               :: r12                 ! distance between two atoms
-        REAL*8                               :: CFDM_prefactor      ! CFDM prefactor
-        REAL*8                               :: Rvdw12              ! sum of two Rvdw for atom1 and atom2
-        REAL*8,              DIMENSION(3)    :: dxyz                ! displacement between two atoms
-        !----------------------------------------------------------------------------------------------------------------------------------
-        REAL*8,              DIMENSION(3,3)  :: BCFDM
-        !----------------------------------------------------------------------------------------------------------------------------------
-        INTEGER                              :: atom_idx
-        INTEGER                              :: dis_i
-        INTEGER                              :: dis_j
-        INTEGER                              :: dis_k
-        !----------------------------------------------------------------------------------------------------------------------------------
-        
-        CALL supercell_get_info(rgb, atom_idx, dis_i, dis_j, dis_k)
-        
-        !----------------------------------------------------------------------------------------------------------------------------------
-        BCFDM = 0.0D0
-        !----------------------------------------------------------------------------------------------------------------------------------
-        DO img_i = cfdmimage(1,1), cfdmimage(2,1)
-            DO img_j = cfdmimage(1,2), cfdmimage(2,2)
-                DO img_k = cfdmimage(1,3), cfdmimage(2,3)
-                    IF ((img_i .NE. 0) .OR. (img_j .NE. 0) .OR. (img_k .NE. 0)) THEN
-                        !------------------------------------------------------------------------------------------------------------------
-                        ! find the coordinate of images
-                        !------------------------------------------------------------------------------------------------------------------
-                        dxyz(:) = (0-img_i)*lattice_vector_SL(:,1) + (0-img_j)*lattice_vector_SL(:,2) + (0-img_k)*lattice_vector_SL(:,3)
-                        !------------------------------------------------------------------------------------------------------------------
-                        r12     = DSQRT(dxyz(1)*dxyz(1) + dxyz(2)*dxyz(2) + dxyz(3)*dxyz(3))
-                        Rvdw12  = 2.0D0*Rvdw_eff(atom_idx)
-                        !------------------------------------------------------------------------------------------------------------------
-                        CFDM_prefactor = omega_screened(atom_idx)*omega_screened(atom_idx) * alpha_eff(atom_idx)
-                        !------------------------------------------------------------------------------------------------------------------
-                        IF(r12 .LE. mbd_cfdm_dip_cutoff/bohr) BCFDM = BCFDM + lr_bare_dipole_tensor(dxyz,r12,Rvdw12) * CFDM_prefactor
-                        !------------------------------------------------------------------------------------------------------------------
-                    END IF
-                END DO
-            END DO
-        END DO
-        !----------------------------------------------------------------------------------------------------------------------------------
-        
-        !----------------------------------------------------------------------------------------------------------------------------------
-        BCFDM(1,1) = BCFDM(1,1) + omega_screened(atom_idx)*omega_screened(atom_idx)        ! JJ: 1/2 missing
-        BCFDM(2,2) = BCFDM(2,2) + omega_screened(atom_idx)*omega_screened(atom_idx)        !     kinetic term missing
-        BCFDM(3,3) = BCFDM(3,3) + omega_screened(atom_idx)*omega_screened(atom_idx)
-        !----------------------------------------------------------------------------------------------------------------------------------
-    END FUNCTION cfdm_diag_block
-    !--------------------------------------------------------------------------------------------------------------------------------------
-
-    !--------------------------------------------------------------------------------------------------------------------------------------
-    FUNCTION cfdm_offdiag_block(rgb,cgb) RESULT(BCFDM)              ! diagonal block of the cfdm matrix
-        !----------------------------------------------------------------------------------------------------------------------------------
-        INTEGER, INTENT(IN)                  :: rgb                 ! global index for atom 'row'
-        INTEGER, INTENT(IN)                  :: cgb                 ! global index for atom 'col'
-        !----------------------------------------------------------------------------------------------------------------------------------
-        INTEGER                              :: img_i               ! cell index along i
-        INTEGER                              :: img_j               ! cell index along j
-        INTEGER                              :: img_k               ! cell index along k
-        REAL*8                               :: r12                 ! distance between two atoms
-        REAL*8                               :: CFDM_prefactor      ! CFDM prefactor
-        REAL*8                               :: Rvdw12              ! sum of two Rvdw for atom1 and atom2
-        REAL*8,              DIMENSION(3)    :: dxyz                ! displacement between two atoms
-        !----------------------------------------------------------------------------------------------------------------------------------
-        REAL*8,              DIMENSION(3,3)  :: BCFDM
-        !----------------------------------------------------------------------------------------------------------------------------------
-        INTEGER                              :: ratom_idx
-        INTEGER                              :: rdis_i
-        INTEGER                              :: rdis_j
-        INTEGER                              :: rdis_k
-        !----------------------------------------------------------------------------------------------------------------------------------
-        INTEGER                              :: catom_idx
-        INTEGER                              :: cdis_i
-        INTEGER                              :: cdis_j
-        INTEGER                              :: cdis_k
-        !----------------------------------------------------------------------------------------------------------------------------------
-        
-        CALL supercell_get_info(rgb, ratom_idx, rdis_i, rdis_j, rdis_k)
-        CALL supercell_get_info(cgb, catom_idx, cdis_i, cdis_j, cdis_k)
-        
-        !----------------------------------------------------------------------------------------------------------------------------------
-        BCFDM = 0.0D0
-        !----------------------------------------------------------------------------------------------------------------------------------
-        DO img_i = cfdmimage(1,1), cfdmimage(2,1)                 ! loop through the images of the col atom
-            DO img_j = cfdmimage(1,2), cfdmimage(2,2)
-                DO img_k = cfdmimage(1,3), cfdmimage(2,3)
-                    !------------------------------------------------------------------------------------------------------------------
-                    ! find the coordinate of images
-                    !------------------------------------------------------------------------------------------------------------------
-                    dxyz(:) = (coords(:,ratom_idx) - coords(:,catom_idx))                                                                       &
-                            + ((rdis_i-cdis_i)*lattice_vector(:,1) + (rdis_j-cdis_j)*lattice_vector(:,2) + (rdis_k-cdis_k)*lattice_vector(:,3)) &
-                            + ((0-img_i)*lattice_vector_SL(:,1)    + (0-img_j)*lattice_vector_SL(:,2)    + (0-img_k)*lattice_vector_SL(:,3))
-                    !------------------------------------------------------------------------------------------------------------------
-                    r12     = DSQRT(dxyz(1)*dxyz(1) + dxyz(2)*dxyz(2) + dxyz(3)*dxyz(3))
-                    Rvdw12  = Rvdw_eff(ratom_idx) + Rvdw_eff(catom_idx)
-                    !------------------------------------------------------------------------------------------------------------------
-                    CFDM_prefactor = omega_screened(ratom_idx)*omega_screened(catom_idx) * DSQRT(alpha_eff(ratom_idx)*alpha_eff(catom_idx))
-                    !------------------------------------------------------------------------------------------------------------------
-                    IF(r12 .LE. mbd_cfdm_dip_cutoff/bohr) BCFDM = BCFDM + lr_bare_dipole_tensor(dxyz,r12,Rvdw12) * CFDM_prefactor
-                    !------------------------------------------------------------------------------------------------------------------
-                END DO
-            END DO
-        END DO
-        !----------------------------------------------------------------------------------------------------------------------------------
-    END FUNCTION cfdm_offdiag_block
     !--------------------------------------------------------------------------------------------------------------------------------------
 
     !--------------------------------------------------------------------------------------------------------------------------------------
