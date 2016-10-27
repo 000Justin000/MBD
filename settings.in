@@ -4,4 +4,4 @@ mbd_supercell_cutoff  20.d0
 mbd_scs_dip_cutoff    120.0  
 mbd_scs_vacuum_axis   .false. .false. .false.
 nprow                 2
-npcol                 2
+npcol                 3
