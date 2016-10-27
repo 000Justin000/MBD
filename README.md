@@ -16,33 +16,30 @@ simple pairwise dispersion approaches:
 (2) long-range Coulomb response (screening) that effectively 
 modifies the polarizabilities of interacting species.
 
+(This code is modified on top of the effort by Alexandre Tkatchenko)
+
 Download
 -----------------------------------------------------------
-
-http://th.fhi-berlin.mpg.de/~tkatchen/MBD 
+https://github.com/000Justin000/MBD
 
 Contact
 -----------------------------------------------------------
-Alexandre Tkatchenko (tkatchenko@fhi-berlin.mpg.de)
+Junteng Jia (jj585@cornell.edu)
 
 
 Compilation
 -----------------------------------------------------------
 
-To build the MBD code, first uncompress the package:
-
-    tar -xvf MBD.tar
-    cd MBD/
-
-and then edit the Makefile and change the FC and MKL_ROOT flag to 
-to specify fortran complier and LAPACK/BLAS library. 
+To build the MBD code, modify the Makefile and change the FC,
+LD and MKL_ROOT flag to to specify fortran complier and 
+(SCA)LAPACK/BLAS library. 
 
 example :- 
 
 FC=mpiifort
 MKL_ROOT=/opt/intel/composer_xe_2013.2.146/mkl/lib/intel64
 
-After this, you should be able to generate the `DFT_MBD_AT_rsSCS.x` 
+After this, you should be able to generate the `pmbd.x` 
 binary by running:
 
 make
@@ -58,24 +55,24 @@ or solid. See Eq.(8) in Ref. [1] below.
 
 
 example:-
-------------------geometry.xyz----------------------------------
+-------------------------geometry.in-----------------------------
 12
 
-C -1.04163594 -1.42199238 0.00000000 0.8062
-C -1.45013466 -0.85487018 1.21057904 0.8062
+C -1.04163594 -1.42199238  0.00000000 0.8062
+C -1.45013466 -0.85487018  1.21057904 0.8062
 C -1.45013466 -0.85487018 -1.21057904 0.8062
-C -2.26713561 0.27938790 1.21059830 0.8062
-C -2.67555716 0.84658359 0.00000000 0.8062
-C -2.26713561 0.27938790 -1.21059830 0.8062
+C -2.26713561  0.27938790  1.21059830 0.8062
+C -2.67555716  0.84658359  0.00000000 0.8062
+C -2.26713561  0.27938790 -1.21059830 0.8062
 H -1.13113521 -1.29793512 -2.15594541 0.6017
-H -2.58624335 0.72214218 -2.15607894 0.6017
-H -3.31360362 1.73238019 0.00000000 0.6016
-H -2.58624335 0.72214218 2.15607894 0.6017
-H -1.13113521 -1.29793512 2.15594541 0.6017
-H -0.40357262 -2.30778356 0.00000000 0.6016
-lattice_vector 20.0       0.0      0.0
-lattice_vector    0.0    20.0      0.0
-lattice_vector    0.0       0.0   20.0
+H -2.58624335  0.72214218 -2.15607894 0.6017
+H -3.31360362  1.73238019  0.00000000 0.6016
+H -2.58624335  0.72214218  2.15607894 0.6017
+H -1.13113521 -1.29793512  2.15594541 0.6017
+H -0.40357262 -2.30778356  0.00000000 0.6016
+lattice_vector   20.0       0.0      0.0
+lattice_vector    0.0      20.0      0.0
+lattice_vector    0.0       0.0     20.0
 -----------------------------------------------------------------
 if string "lattice_vector" is present in "geometry.xyz" file then
 the code uses periodic boundary conditions.
@@ -84,12 +81,14 @@ the code uses periodic boundary conditions.
 and a "setting.in" file which contains the parameters for the MBD code
 
 example:-
------------------------setting.in---------------------------------------
+--------------------------setting.in-----------------------------
 xc                    1
 mbd_cfdm_dip_cutoff   100.d0
 mbd_supercell_cutoff  25.d0
 mbd_scs_dip_cutoff    120.0
 mbd_scs_vacuum_axis   .false. .false. .false.
+nprow                 2
+npcol                 3
 -----------------------------------------------------------------
 
 Keyword information:--------------------
@@ -115,7 +114,6 @@ tions. (default = 25 Angstrom) NOTE: The convergence wrt the value of
 mbd_supercell_cutoff must be carefully tested for periodic systems with low
 symmetry.
 
-
 mbd_scs_vacuum_axis (flag) (flag) (flag)
 This keyword specifies directions to be treated as vacuum in the case of low dimensional systems.
 Default: No vacuum, i.e. mbd_scs_vacuum_axis .false. .false. .false.
@@ -123,10 +121,16 @@ For example in the case of periodic slab along XY directions the keyword
 mbd_scs_vacuum_axis .false. .false. .true. is needed to specify Z as
 the vacuum direction in MBD/SCS calculations.
 
+nprow (value)
+number of processes along the row direction for the BLACS grid
 
+npcol (value)
+number of processes along the column direction for the BLACS grid
+
+(nprow * npcol shoule equal the total number of processes used to run the program)
 
 You can run following command to compute the MBD energy: 
-mpiexec -np 8 `pwd`/DFT_MBD_AT_rsSCS.x geometry.xyz setting.in
+mpiexec -np 6 `pwd`/pmbd.x geometry.in setting.in
 
 
 References and citations
@@ -149,5 +153,3 @@ The basic references for the MBD method are:
 A concise review of the MBD methodology is available at:
 http://th.fhi-berlin.mpg.de/site/uploads/Publications/psik-ver1-3_20121212.pdf,
 to be published in J. Phys.: Condens. Matter.
-
-
