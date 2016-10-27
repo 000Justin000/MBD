@@ -54,7 +54,7 @@ volume (V_eff / V_free) corresponding to a given atom in the molecule
 or solid. See Eq.(8) in Ref. [1] below.
 
 
-example:-
+example:-  
 -------------------------geometry.in-----------------------------  
   
 12  
@@ -79,11 +79,9 @@ lattice_vector    0.0       0.0     20.0
 if string "lattice_vector" is present in "geometry.xyz" file then
 the code uses periodic boundary conditions.
 
-
 and a "setting.in" file which contains the parameters for the MBD code
 
-example:-
-
+example:-  
 --------------------------setting.in-----------------------------
 
 xc                    1  
@@ -133,8 +131,7 @@ number of processes along the column direction for the BLACS grid
 
 (nprow * npcol shoule equal the total number of processes used to run the program)
 
-You can run following command to compute the MBD energy: 
-
+You can run following command to compute the MBD energy:  
 mpiexec -np 6 `pwd`/pmbd.x geometry.in setting.in
 
 
