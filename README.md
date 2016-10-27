@@ -34,7 +34,7 @@ To build the MBD code, modify the Makefile.in and change the
 FC, LD and MKL_ROOT flag to to specify fortran complier and 
 (SCA)LAPACK/BLAS library. 
 
-example:- 
+example:-  
 -----------------------Makefile.in-------------------------
 FC=mpiifort
 MKL_ROOT=/opt/intel/composer_xe_2013.2.146/mkl/lib/intel64
