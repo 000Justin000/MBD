@@ -55,39 +55,25 @@ or solid. See Eq.(8) in Ref. [1] below.
 
 
 example:-
--------------------------geometry.in-----------------------------
-
-12
-
-C -1.04163594 -1.42199238  0.00000000 0.8062
-
-C -1.45013466 -0.85487018  1.21057904 0.8062
-
-C -1.45013466 -0.85487018 -1.21057904 0.8062
-
-C -2.26713561  0.27938790  1.21059830 0.8062
-
-C -2.67555716  0.84658359  0.00000000 0.8062
-
-C -2.26713561  0.27938790 -1.21059830 0.8062
-
-H -1.13113521 -1.29793512 -2.15594541 0.6017
-
-H -2.58624335  0.72214218 -2.15607894 0.6017
-
-H -3.31360362  1.73238019  0.00000000 0.6016
-
-H -2.58624335  0.72214218  2.15607894 0.6017
-
-H -1.13113521 -1.29793512  2.15594541 0.6017
-
-H -0.40357262 -2.30778356  0.00000000 0.6016
-
-lattice_vector   20.0       0.0      0.0
-
-lattice_vector    0.0      20.0      0.0
-
-lattice_vector    0.0       0.0     20.0
+-------------------------geometry.in-----------------------------  
+  
+12  
+  
+C -1.04163594 -1.42199238  0.00000000 0.8062  
+C -1.45013466 -0.85487018  1.21057904 0.8062  
+C -1.45013466 -0.85487018 -1.21057904 0.8062  
+C -2.26713561  0.27938790  1.21059830 0.8062  
+C -2.67555716  0.84658359  0.00000000 0.8062  
+C -2.26713561  0.27938790 -1.21059830 0.8062  
+H -1.13113521 -1.29793512 -2.15594541 0.6017  
+H -2.58624335  0.72214218 -2.15607894 0.6017  
+H -3.31360362  1.73238019  0.00000000 0.6016  
+H -2.58624335  0.72214218  2.15607894 0.6017  
+H -1.13113521 -1.29793512  2.15594541 0.6017  
+H -0.40357262 -2.30778356  0.00000000 0.6016  
+lattice_vector   20.0       0.0      0.0  
+lattice_vector    0.0      20.0      0.0  
+lattice_vector    0.0       0.0     20.0  
 
 -----------------------------------------------------------------
 if string "lattice_vector" is present in "geometry.xyz" file then
@@ -100,65 +86,49 @@ example:-
 
 --------------------------setting.in-----------------------------
 
-xc                    1
-
-mbd_cfdm_dip_cutoff   100.d0
-
-mbd_supercell_cutoff  25.d0
-
-mbd_scs_dip_cutoff    120.0
-
-mbd_scs_vacuum_axis   .false. .false. .false.
-
-nprow                 2
-
-npcol                 3
+xc                    1  
+mbd_cfdm_dip_cutoff   100.d0  
+mbd_supercell_cutoff  25.d0  
+mbd_scs_dip_cutoff    120.0  
+mbd_scs_vacuum_axis   .false. .false. .false.  
+nprow                 2  
+npcol                 3  
 
 -----------------------------------------------------------------
 Keyword information:
 
-xc (value)
+xc (value)  
+Specify Exchange-correction type  
+xc   1   #(for PBE type)  
+xc   2   #(for PBE0 type)  
+xc   3   #(for HSE type)  
 
-Specify Exchange-correction type 
-
-xc   1   #(for PBE type)
-
-xc   2   #(for PBE0 type)
-
-xc   3   #(for HSE type)
-
-mbd_cfdm_dip_cutoff (value)
-
+mbd_cfdm_dip_cutoff (value)  
 Radius used to integrate dipole field in periodic MBD calculation (internal default=100.0 Angstrom)
 
-mbd_scs_dip_cutoff (value)
-
-Radius used to integrate dipole field in periodic SCS	 calculation (internal default=100.0 Angstrom)
+mbd_scs_dip_cutoff (value)  
+Radius used to integrate dipole field in periodic SCS calculation (internal default=100.0 Angstrom)
 NOTE: Our numerical tests suggest that C6 coefficient should be converged by tuning the mbd_scs_dip_cutoff parameter.
 This is especially important when studying low-dimensional systems. For example for graphene the C6 coefficient
 is of the order 140 hartree·bohr6 which requires a 700 Angstrom cutoff.
 
-mbd_supercell_cutoff (value)
-
-Radius used to construct the supercell in periodic MBD calcula-
-tions. (default = 25 Angstrom) NOTE: The convergence wrt the value of
+mbd_supercell_cutoff (value)  
+Radius used to construct the supercell in periodic MBD calculations. 
+(default = 25 Angstrom) NOTE: The convergence wrt the value of
 mbd_supercell_cutoff must be carefully tested for periodic systems with low
 symmetry.
 
-mbd_scs_vacuum_axis (flag) (flag) (flag)
-
+mbd_scs_vacuum_axis (flag) (flag) (flag)  
 This keyword specifies directions to be treated as vacuum in the case of low dimensional systems.
 Default: No vacuum, i.e. mbd_scs_vacuum_axis .false. .false. .false.
 For example in the case of periodic slab along XY directions the keyword
 mbd_scs_vacuum_axis .false. .false. .true. is needed to specify Z as
 the vacuum direction in MBD/SCS calculations.
 
-nprow (value)
-
+nprow (value)  
 number of processes along the row direction for the BLACS grid
 
-npcol (value)
-
+npcol (value)  
 number of processes along the column direction for the BLACS grid
 
 (nprow * npcol shoule equal the total number of processes used to run the program)
