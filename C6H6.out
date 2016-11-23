@@ -1,4 +1,4 @@
-  Using        4 parallel tasks.
+  Using        1 parallel tasks.
    |----------------------------------Input Geometry----------------------------------
    Number of atoms   12
  
@@ -19,43 +19,11 @@
     Exchange-Correlation functional:   1  (PBE)
     xc type not specified in setting file, using default for 
     Exchange-Correlation functional:   1  (PBE)
-    Radius used to construct the supercell in periodic MBD calculations  20.00000 Angstrom
+    Radius used to construct the supercell in periodic MBD calculations  25.00000 Angstrom
     Radius used to integrate dipole field in periodic MBD calculations 100.00000 Angstrom
-    Radius used to integrate dipole field in periodic SCS calculations 120.00000 Angstrom
+    Radius used to integrate dipole field in periodic SCS calculations 100.00000 Angstrom
      Found mbd_scs_vacuum_axis keyword in setting file
      This keyword specifies direction of vacuum region in case of low-dimensional systems
-    Default: No vacuum mbd_scs_vacuum_axis .false. .false. .false.
-    For example in the case of periodic slab along xy directions the keyword
-    mbd_scs_vacuum_axis .false. .false. .true. is needed to specify z as
-    vacuum direction in MBD/SCS calculation.
-   |---------------------------------------------------------------------------
- initializing blacs
-    Radius used to construct the supercell in periodic MBD calculations  20.00000 Angstrom
-    Radius used to integrate dipole field in periodic MBD calculations 100.00000 Angstrom
-    Radius used to integrate dipole field in periodic SCS calculations 120.00000 Angstrom
-     Found mbd_scs_vacuum_axis keyword in setting file
-     This keyword specifies direction of vacuum region in case of low-dimensional systems
-    Default: No vacuum mbd_scs_vacuum_axis .false. .false. .false.
-    For example in the case of periodic slab along xy directions the keyword
-    mbd_scs_vacuum_axis .false. .false. .true. is needed to specify z as
-    vacuum direction in MBD/SCS calculation.
-   |---------------------------------------------------------------------------
- initializing blacs
-    Radius used to construct the supercell in periodic MBD calculations  20.00000 Angstrom
-    Radius used to integrate dipole field in periodic MBD calculations 100.00000 Angstrom
-    Radius used to integrate dipole field in periodic SCS calculations 120.00000 Angstrom
-     Found mbd_scs_vacuum_axis keyword in setting file
-     This keyword specifies direction of vacuum region in case of low-dimensional systems
-    Radius used to construct the supercell in periodic MBD calculations  20.00000 Angstrom
-    Radius used to integrate dipole field in periodic MBD calculations 100.00000 Angstrom
-    Radius used to integrate dipole field in periodic SCS calculations 120.00000 Angstrom
-     Found mbd_scs_vacuum_axis keyword in setting file
-     This keyword specifies direction of vacuum region in case of low-dimensional systems
-    Default: No vacuum mbd_scs_vacuum_axis .false. .false. .false.
-    For example in the case of periodic slab along xy directions the keyword
-    mbd_scs_vacuum_axis .false. .false. .true. is needed to specify z as
-    vacuum direction in MBD/SCS calculation.
-   |---------------------------------------------------------------------------
     Default: No vacuum mbd_scs_vacuum_axis .false. .false. .false.
     For example in the case of periodic slab along xy directions the keyword
     mbd_scs_vacuum_axis .false. .false. .true. is needed to specify z as

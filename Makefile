@@ -18,5 +18,8 @@ test_graphene:
 test_PBBA:
 	mpiexec -n 6 ./pmbd.x PBBA.in settings.in > out
 
+test_TiOCHF:
+	mpiexec -n 1 ./pmbd.x TiOCHF.in settings.in > out
+
 clean: 
 	rm -f *.o  *.mod *.x *.optrpt out

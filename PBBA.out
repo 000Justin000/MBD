@@ -1,5 +1,5 @@
-  Using       24 parallel tasks.
-   |---------------------------Input Geometry-----------------------------------------
+  Using        1 parallel tasks.
+   |----------------------------------Input Geometry----------------------------------
    Number of atoms  528
  
     C          0.000000        16.535932         8.710129         0.866409
@@ -530,12 +530,13 @@
     H          3.100000        -9.692900        14.306259         0.659908
     H          3.100000        -5.378000        11.827877         0.657017
     H          3.100000        -7.551317        15.555555         0.657598
-   |---------------------------------------------------------------------------
+   |----------------------------------------------------------------------------------
    |--------------------------------MBD@rSCS Settings---------------------------
     Exchange-Correlation functional:   1  (PBE)
-   |---------------------------------------------------------------------------
+    xc type not specified in setting file, using default for 
+    Exchange-Correlation functional:   1  (PBE)
    | Many-Body Dispersion (MBD@rsSCS) energy
-   | Dynamic molecular polarizability alpha(iw) (bohr^3)
+   | System dynamic molecular polarizability alpha(iw) (bohr^3)
    | ---------------------------------------------------------------------------
    |  omega(Ha)   alpha_iso      alpha_xx       alpha_yy       alpha_zz
    |   0.000000   0.367778E+04   0.188872E+04   0.457206E+04   0.457256E+04
@@ -560,9 +561,9 @@
    |   8.448960   0.116971E+02   0.116454E+02   0.117229E+02   0.117229E+02
    |  25.451700   0.129299E+01   0.129236E+01   0.129330E+01   0.129330E+01
    | ---------------------------------------------------------------------------
-   | Molecular C6 coefficient    :      5096641.27977027    hartree bohr^6
+   | System C6 coefficient    :      5096641.27977020    hartree bohr^6
    | ---------------------------------------------------------------------------
-   | Partitioned C6 (hartree bohr^6) | alpha (bohr^3)  of atom in molecule
+   | Partitioned C6 (hartree bohr^6) | alpha (bohr^3)  of atom in system
    | ---------------------------------------------------------------------------
    | ATOM    1  C    30.890820          8.817536
    | ATOM    2  C    30.242629          8.672111
@@ -1093,4 +1094,6 @@
    | ATOM  527  H     1.723043          2.007230
    | ATOM  528  H     1.726838          2.010226
    | ---------------------------------------------------------------------------
+   | Creating super cell of dimension  1 X   1 X   1 in MBD calculation
+   | containing   528  atom
    | MBD@rsSCS energy   :        -1.078445880 Ha            -29.345591320 eV
