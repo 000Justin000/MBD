@@ -213,10 +213,12 @@ PROGRAM MBD_rsSCS
     ! major calculation
     !---------------------------------------------------------------------
     CALL init_blacs()
+    !---------------------------------------------------------------------
     start_time = MPI_Wtime()
     CALL MBD_at_rsSCS(ene_mbd_rsSCS)
-    stop_time = MPI_Wtime()
-    WRITE(*,'(A,F10.18)') "Total Calculation time: ", stop_time-start_time
+    stop_time  = MPI_Wtime()
+    !---------------------------------------------------------------------
+    IF (iproc==0) WRITE(*,'(A,F18.10)') "Total Calculation time: ", stop_time-start_time
     !---------------------------------------------------------------------
 
     !---------------------------------------------------------------------

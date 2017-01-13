@@ -10,16 +10,16 @@ UTILS.o: UTILS.f90
 	${FC} -o UTILS.o -c UTILS.f90 ${FFLAGS}
 
 test_C6H6:
-	mpiexec -n 6 ./pmbd.x C6H6.in settings.in > out
+	mpiexec -n 4 ./pmbd.x examples/C6H6.in settings.in > out
 
 test_graphene:
-	mpiexec -n 6 ./pmbd.x graphene.in settings.in > out
+	mpiexec -n 4 ./pmbd.x examples/graphene_111.in settings.in > out
 
 test_PBBA:
-	mpiexec -n 6 ./pmbd.x PBBA.in settings.in > out
+	mpiexec -n 4 ./pmbd.x examples/PBBA.in settings.in > out
 
 test_TiOCHF:
-	mpiexec -n 1 ./pmbd.x TiOCHF.in settings.in > out
+	mpiexec -n 4 ./pmbd.x examples/TiOCHF.in settings.in > out
 
 clean: 
 	rm -f *.o  *.mod *.x *.optrpt out
