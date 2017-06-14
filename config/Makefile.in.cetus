@@ -1,0 +1,8 @@
+FC = bgxlf90_r
+LD = bgxlf90_r
+AR      = ar
+RANLIB  = ranlib
+ARFLAGS = ruv
+BLAS_LIB = /soft/libraries/essl/current/lib64/libesslsmpbg.a
+FFLAGS  = -O3 -qarch=qp -qtune=qp -qsmp=auto:opt:omp -qhot=simd:vector:arraypad -qalias=noaryovrlp:nointptr -qprefetch -qunroll=yes -qprefetch -qunroll=yes -qreport -qsimd=auto
+LDFLAGS = -qp -qsmp=omp -qthreaded -qopenmp ${BLAS_LIB}

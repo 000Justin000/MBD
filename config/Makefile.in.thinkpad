@@ -1,0 +1,11 @@
+INTELROOT = /home/junteng/Softwares/intel_parallel_studio_2017/
+PFC       = $(INTELROOT)/impi/2017.2.174/intel64/bin/mpiifort
+PLD       = $(INTELROOT)/impi/2017.2.174/intel64/bin/mpiifort
+FC        = $(INTELROOT)/compilers_and_libraries_2017.2.174/linux/bin/intel64/ifort
+LD        = $(INTELROOT)/compilers_and_libraries_2017.2.174/linux/bin/intel64/ifort
+AR        = ar
+RANLIB    = ranlib
+ARFLAGS   = ruv
+MKLROOT   = $(INTELROOT)/mkl/
+FFLAGS    = -g -O3 -qopt-report=5 -qopt-report-phase=vec -qopt-report-phase=par -openmp -align array64byte -assume byterecl -D__INTEL -fpp -xCORE-AVX2 -fpic
+LDFLAGS   = -qopenmp ${MKLROOT}/lib/intel64/libmkl_blas95_lp64.a ${MKLROOT}/lib/intel64/libmkl_lapack95_lp64.a -L${MKLROOT}/lib/intel64 -lmkl_scalapack_lp64 -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -lmkl_blacs_intelmpi_lp64 -liomp5 -lpthread -lm -ldl

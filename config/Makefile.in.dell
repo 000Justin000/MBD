@@ -1,0 +1,8 @@
+FC      = ifort
+LD      = ifort
+AR      = ar
+RANLIB  = ranlib
+ARFLAGS = ruv
+MKLROOT = /home/junteng/intel/mkl/lib/intel64
+FFLAGS  = -g -O3 -qopt-report=5 -qopt-report-phase=vec -qopt-report-phase=par -qopenmp -align array64byte -assume byterecl -D__INTEL -fpp -xCORE-AVX2 -fpic
+LDFLAGS = -qopenmp -L$(MKLROOT) -lmkl_intel_lp64 -lmkl_core -lmkl_intel_thread -lpthread -lm -ldl

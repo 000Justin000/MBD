@@ -1,13 +1,13 @@
-include Makefile.in
+include config/Makefile.in.thinkpad
 
 exec: UTILS.o MBD_rsSCS.o 
-	${LD} -o pmbd.x UTILS.o MBD_rsSCS.o ${LDFLAGS}
+	${PLD} -o pmbd.x UTILS.o MBD_rsSCS.o ${LDFLAGS}
 
 MBD_rsSCS.o: MBD_rsSCS.f90
-	${FC} -o MBD_rsSCS.o -c MBD_rsSCS.f90 ${FFLAGS}
+	${PFC} -o MBD_rsSCS.o -c MBD_rsSCS.f90 ${FFLAGS}
 
 UTILS.o: UTILS.f90
-	${FC} -o UTILS.o -c UTILS.f90 ${FFLAGS}
+	${PFC} -o UTILS.o -c UTILS.f90 ${FFLAGS}
 
 test_C6H6:
 	mpiexec -n 4 ./pmbd.x examples/C6H6.in settings.in > out
