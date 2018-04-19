@@ -9,6 +9,9 @@ MBD_rsSCS.o: MBD_rsSCS.f90
 UTILS.o: UTILS.f90
 	${PFC} -o UTILS.o -c UTILS.f90 ${FFLAGS}
 
+test_H2O:
+	mpiexec -n 4 ./pmbd.x examples/H2O.in settings.in > out
+
 test_C6H6:
 	mpiexec -n 4 ./pmbd.x examples/C6H6.in settings.in > out
 

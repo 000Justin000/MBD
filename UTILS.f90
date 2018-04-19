@@ -254,15 +254,15 @@ CONTAINS
                 Rvdw_iso(i_myatom) = (hirshfeld_volume(i_myatom)**otd)*R_vdw_free               ! JJ : tight
             END DO
             !------------------------------------------------------------------------------------------------------------------------------
-            
+
             !------------------------------------------------------------------------------------------------------------------------------
             ! 1. get coupled atomic "local" polarizability by summing over row or columns of relay tensor, 
             ! 2. get the mol_pol_tensor by summing over the whole relay_matrix
             !------------------------------------------------------------------------------------------------------------------------------
             IF(i_freq .EQ. 0) THEN
-               CALL get_screened_alpha(alpha_eff)                                                                   ! static polarizability
+                CALL get_screened_alpha(alpha_eff)                                                                   ! static polarizability
             ELSE
-               CALL get_screened_alpha(coupled_atom_pol(i_freq,:))                                     ! frequency dependent polarizability
+                CALL get_screened_alpha(coupled_atom_pol(i_freq,:))                                     ! frequency dependent polarizability
             END IF 
             !------------------------------------------------------------------------------------------------------------------------------
             
@@ -622,6 +622,10 @@ CONTAINS
                     !-------------------------------------------------------------------------------------------------
                     IF(r12 .LE. mbd_scs_dip_cutoff/bohr) BSCS = BSCS + gaussian_dipole_tensor(dxyz,r12,sgm12,Rvdw12)
                     !-------------------------------------------------------------------------------------------------
+
+                    !----------------------------------------------------------------------------------------------------------------------------------
+                    if ((rgb.EQ.424) .AND. (cgb.EQ.184)) write(*,*) dxyz, r12, sgm12, Rvdw12
+                    !----------------------------------------------------------------------------------------------------------------------------------
                 END DO
             END DO
         END DO
